@@ -27,3 +27,8 @@ Thumbs.db
 
 # AI
 AGENTS.md
+
+# Local development smoke-test environment
+.tmp-appdata/
+.tmp-ct-config/
+.tmp-coding-test/
