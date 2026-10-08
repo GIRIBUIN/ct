@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -93,22 +92,6 @@ func TestLegacyConfigWithoutProfile(t *testing.T) {
 	}
 }
 
-func TestFirstRun(t *testing.T) {
-	base := t.TempDir()
-	path := filepath.Join(base, "config", "config.json")
-	root := filepath.Join(base, "coding test 한글")
-	var output bytes.Buffer
-	got, err := LoadOrCreate(path, strings.NewReader("\""+root+"\"\r\n"), &output)
-	if err != nil || got != Defaults(root) {
-		t.Fatalf("first run = %+v, %v", got, err)
-	}
-	output.Reset()
-	loaded, err := LoadOrCreate(path, strings.NewReader(""), &output)
-	if err != nil || loaded != got || output.Len() != 0 {
-		t.Fatalf("second run = %+v, %v; output %q", loaded, err, output.String())
-	}
-}
-
 func TestInvalidConfiguration(t *testing.T) {
 	base := t.TempDir()
 	path := filepath.Join(base, "config.json")
@@ -118,17 +101,46 @@ func TestInvalidConfiguration(t *testing.T) {
 	if err := Save(path, Defaults("relative")); err == nil {
 		t.Fatal("relative configured root accepted")
 	}
-	if _, err := LoadOrCreate(path, strings.NewReader("\n"), &bytes.Buffer{}); err == nil {
-		t.Fatal("empty root accepted")
-	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("invalid first run created config: %v", err)
 	}
 	if err := os.WriteFile(path, []byte("invalid json"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	var output bytes.Buffer
-	if _, err := LoadOrCreate(path, strings.NewReader(base), &output); err == nil || output.Len() != 0 {
-		t.Fatalf("malformed config prompted or was accepted: %v, %q", err, output.String())
+	if _, err := Load(path); err == nil {
+		t.Fatal("malformed config accepted")
+	}
+}
+
+func TestUpdatePreservesValidConfigOnFailure(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, "config.json")
+	original := Defaults(filepath.Join(base, "solutions"))
+	if err := Save(path, original); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Update(path, Defaults("relative")); err == nil {
+		t.Fatal("invalid update succeeded")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("failed save corrupted config: %v", err)
+	}
+	updated := original
+	updated.EditorProfile = "my profile"
+	if err := Update(path, updated); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil || got != updated {
+		t.Fatalf("updated config = %+v, %v", got, err)
+	}
+	files, err := filepath.Glob(filepath.Join(base, ".ct-config-*.tmp"))
+	if err != nil || len(files) != 0 {
+		t.Fatalf("temporary configuration remains: %v, %v", files, err)
 	}
 }

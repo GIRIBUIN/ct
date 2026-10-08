@@ -6,7 +6,23 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 )
+
+// EnsureProfile lets VS Code select (or create) a named profile through its CLI.
+func EnsureProfile(name, profile string) error {
+	path, err := Find(name)
+	if err != nil {
+		return fmt.Errorf("find VS Code CLI: %w; choose Default or make the CLI available", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	data, err := ListExtensions(ctx, path, profile)
+	if err != nil {
+		return fmt.Errorf("use VS Code profile %q: %w: %s", profile, err, strings.TrimSpace(string(data)))
+	}
+	return nil
+}
 
 // Find reuses the platform-specific discovery used when opening solutions.
 func Find(name string) (string, error) {

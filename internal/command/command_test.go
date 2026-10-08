@@ -118,7 +118,7 @@ func TestRunFirstAndExistingSolution(t *testing.T) {
 			}
 			opts := options{id: tt.id, platform: tt.platform, language: tt.language}
 			var output bytes.Buffer
-			if err := run(opts, strings.NewReader(root+"\n"), &output, configPath, open); err != nil {
+			if err := run(opts, strings.NewReader(root+"\n\n\n\n"), &output, configPath, open); err != nil {
 				t.Fatal(err)
 			}
 			if !strings.Contains(output.String(), "Created:") {
@@ -144,7 +144,7 @@ func TestEditorFailurePreservesCreatedSolution(t *testing.T) {
 	root := filepath.Join(base, "solutions")
 	configPath := filepath.Join(base, "config.json")
 	wantErr := errors.New("editor unavailable")
-	err := run(options{id: "71A"}, strings.NewReader(root+"\n"), &bytes.Buffer{}, configPath, func(string, string, string, string) error { return wantErr })
+	err := run(options{id: "71A"}, strings.NewReader(root+"\n\n\n\n"), &bytes.Buffer{}, configPath, func(string, string, string, string) error { return wantErr })
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("editor error lost: %v", err)
 	}

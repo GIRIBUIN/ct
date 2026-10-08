@@ -68,8 +68,8 @@ try {
     $env:CT_CONFIG_DIR = $tempCtConfig
 
     if ($firstRun) {
-        # Automatically answer the first-run root prompt.
-        $tempCodingTest | & $exe @ctArgs
+        # Automatically answer the shared first-run wizard with default values.
+        @($tempCodingTest, "", "", "") | & $exe @ctArgs
     }
     else {
         & $exe @ctArgs

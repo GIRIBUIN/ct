@@ -1,11 +1,9 @@
 package config
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,34 +76,40 @@ func Save(path string, cfg Config) error {
 	return nil
 }
 
-func LoadOrCreate(path string, input io.Reader, output io.Writer) (Config, error) {
-	cfg, err := Load(path)
-	if err == nil || !errors.Is(err, os.ErrNotExist) {
-		return cfg, err
+// Update replaces configuration only after a complete temporary file is flushed
+// and closed. The temporary file is on the same filesystem as the destination.
+func Update(path string, cfg Config) error {
+	if err := cfg.validate(path); err != nil {
+		return err
 	}
-	fmt.Fprint(output, "Coding-test root directory: ")
-	line, err := bufio.NewReader(input).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return Config{}, fmt.Errorf("read root directory: %w", err)
-	}
-	root := strings.TrimSpace(line)
-	// Accept paths copied with quotes from a terminal or file manager.
-	if len(root) >= 2 && root[0] == '"' && root[len(root)-1] == '"' {
-		root = root[1 : len(root)-1]
-	}
-	if root == "" {
-		return Config{}, errors.New("coding-test root directory is required")
-	}
-	root, err = filepath.Abs(root)
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return Config{}, fmt.Errorf("resolve root directory: %w", err)
+		return err
 	}
-	cfg = Defaults(root)
-	if err := Save(path, cfg); err != nil {
-		return Config{}, err
+	file, err := os.CreateTemp(filepath.Dir(path), ".ct-config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary configuration: %w", err)
 	}
-	fmt.Fprintln(output, "Configuration saved:", path)
-	return cfg, nil
+	defer os.Remove(file.Name())
+	if _, err = file.Write(append(data, '\n')); err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return fmt.Errorf("write configuration: %w", err)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close configuration: %w", closeErr)
+	}
+	if err := os.Rename(file.Name(), path); err != nil {
+		return fmt.Errorf("replace configuration: %w", err)
+	}
+	return nil
+}
+
+// Validate checks a proposed configuration without writing or creating paths.
+func Validate(path string, cfg Config) error {
+	return cfg.validate(path)
 }
 
 func (cfg *Config) validate(path string) error {

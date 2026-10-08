@@ -1,8 +1,10 @@
 package command
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/editor"
@@ -11,9 +13,11 @@ import (
 
 const usage = `Usage: ct <problem> [-p <platform>] [-l <language>]
        ct doctor
+       ct config
 
 Commands:
   doctor  Diagnose tools, C++ capabilities, extensions and configuration (read-only)
+  config  Configure coding-test root, defaults and VS Code profile interactively
 
 Platforms: codeforces (cf), programmers (pg)
 Languages: cpp (c++), python (py)
@@ -41,11 +45,18 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if opts.config {
+		_, err := configure(path, input, output, editor.EnsureProfile, saveConfiguration)
+		return err
+	}
 	return run(opts, input, output, path, editor.Open)
 }
 
 func run(opts options, input io.Reader, output io.Writer, configPath string, open func(string, string, string, string) error) error {
-	cfg, err := config.LoadOrCreate(configPath, input, output)
+	cfg, err := config.Load(configPath)
+	if errors.Is(err, os.ErrNotExist) {
+		cfg, err = configure(configPath, input, output, editor.EnsureProfile, saveConfiguration)
+	}
 	if err != nil {
 		return err
 	}
