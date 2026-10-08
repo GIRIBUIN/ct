@@ -1,7 +1,8 @@
 name: Release
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
 permissions:
   contents: read
 concurrency:
@@ -11,7 +12,7 @@ jobs:
   validate:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -30,7 +31,7 @@ jobs:
         run: bash scripts/test-distribution.sh
   publish:
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:

@@ -49,3 +49,19 @@ func TestDoctorExitResult(t *testing.T) {
 		}
 	}
 }
+
+func TestDoctorDefaultLanguageLabel(t *testing.T) {
+	checks := []environment.Check{
+		{Section: "Language", Name: "selected", Status: environment.OK, Detail: "rust"},
+		{Section: "Configuration", Name: "language", Status: environment.OK, Detail: "cpp"},
+	}
+	var output bytes.Buffer
+	if err := reportDoctor(&output, checks); err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(strings.Fields(output.String()), " ")
+	if !strings.Contains(text, "Language [OK] selected rust") ||
+		!strings.Contains(text, "Configuration [OK] default language cpp") {
+		t.Fatalf("unclear selected/default language output: %s", output.String())
+	}
+}

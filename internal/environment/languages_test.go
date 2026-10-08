@@ -92,6 +92,9 @@ func TestLanguageDiagnosisAndOverrideAreReadOnly(t *testing.T) {
 				if check.Name == "selected" && check.Detail != selected {
 					t.Fatalf("wrong selection: %+v", check)
 				}
+				if check.Section == "Configuration" && check.Name == "language" && check.Detail != cfg.Language {
+					t.Fatalf("stored default changed by override: %+v", check)
+				}
 				if check.Name == "g++" || check.Name == "GDB" || check.Name == "C/C++" {
 					t.Fatalf("irrelevant C++ requirement: %+v", check)
 				}

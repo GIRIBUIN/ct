@@ -13,7 +13,8 @@ export HOME=$test_root/home
 export XDG_CONFIG_HOME=$test_root/config
 export CT_CONFIG_DIR=$test_root/solutions
 mkdir -p "$HOME" "$XDG_CONFIG_HOME/ct" "$CT_CONFIG_DIR" "$test_root/release"
-printf '#!/bin/sh\nprintf "ct fixture\\n"\n' > "$test_root/release/binary"
+export CT_TEST_VERSION_CALLS=$test_root/version-calls
+printf '#!/bin/sh\nprintf "%%s\\n" "$0" >> "$CT_TEST_VERSION_CALLS"\nprintf "ct fixture\\n"\n' > "$test_root/release/binary"
 asset=$(ct_asset Linux "$(uname -m)")
 hash=$(sha256sum "$test_root/release/binary"); hash=${hash%% *}
 printf '%s  %s\n' "$hash" "$asset" > "$test_root/release/checksums.txt"
@@ -40,7 +41,12 @@ cat "$test_root/release/checksums.txt" "$test_root/release/checksums.txt" > "$te
 # Byte-preserving removal includes profiles whose original last line has no newline.
 printf '# original\nexport ORIGINAL=yes' > "$HOME/.profile"
 cp "$HOME/.profile" "$test_root/original"
-(export PATH="$PATH:$HOME/.local/bin"; ct_install; cmp "$HOME/.profile" "$test_root/original")
+(export PATH="$PATH:$HOME/.local/bin"; ct_install > "$test_root/install-output"; cmp "$HOME/.profile" "$test_root/original")
+[[ $(grep -c '^ct fixture$' "$test_root/install-output") == 1 ]]
+grep -Fxq "Installed: $HOME/.local/bin/ct" "$test_root/install-output"
+grep -Fxq 'Rerun this installer to update ct.' "$test_root/install-output"
+[[ $(wc -l < "$CT_TEST_VERSION_CALLS") == 2 ]]
+[[ $(tail -n 1 "$CT_TEST_VERSION_CALLS") == "$HOME/.local/bin/ct" ]]
 ct_install
 ct_install
 [[ $(grep -c '^# >>> ct PATH >>>$' "$HOME/.profile") == 1 ]]
@@ -52,6 +58,15 @@ printf '%064d  %s\n' 0 "$asset" > "$test_root/release/checksums.txt"
 export -f ct_asset ct_plain_path ct_verify_checksum ct_path_block ct_add_profile ct_download ct_install ct_onboard ct_next_steps ct_open_onboarding_tty
 export test_root asset
 if bash -c ct_install; then echo 'Mismatch accepted' >&2; exit 1; fi
+cmp "$HOME/.local/bin/ct" "$test_root/installed"
+cmp "$HOME/.profile" "$test_root/profile-installed"
+
+# A checksum-valid download must still fail if staged execution fails.
+printf '#!/bin/sh\necho "staged verification failed" >&2\nexit 1\n' > "$test_root/release/binary"
+hash=$(sha256sum "$test_root/release/binary"); hash=${hash%% *}
+printf '%s  %s\n' "$hash" "$asset" > "$test_root/release/checksums.txt"
+if bash -c ct_install > "$test_root/failed-output" 2> "$test_root/failed-error"; then echo 'Failed staged binary accepted' >&2; exit 1; fi
+grep -q 'staged verification failed' "$test_root/failed-error"
 cmp "$HOME/.local/bin/ct" "$test_root/installed"
 cmp "$HOME/.profile" "$test_root/profile-installed"
 

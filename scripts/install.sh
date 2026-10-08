@@ -118,7 +118,7 @@ ct_install() (
     stage=$(mktemp "$bin/.ct-install.XXXXXX")
     cp -- "$temp/binary" "$stage"
     chmod 755 "$stage"
-    "$stage" --version
+    "$stage" --version > /dev/null
     mv -fT -- "$stage" "$target"
     stage=''
     case ":$PATH:" in

@@ -21,7 +21,11 @@ func reportDoctor(output io.Writer, checks []environment.Check) error {
 			section = check.Section
 			fmt.Fprintf(&report, "\n%s\n", section)
 		}
-		fmt.Fprintf(&report, "[%s] %-16s %s\n", check.Status, check.Name, check.Detail)
+		label := check.Name
+		if check.Section == "Configuration" && label == "language" {
+			label = "default language"
+		}
+		fmt.Fprintf(&report, "[%s] %-16s %s\n", check.Status, label, check.Detail)
 		if check.Status == environment.Fail {
 			issues++
 		}
