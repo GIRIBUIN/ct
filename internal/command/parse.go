@@ -12,10 +12,21 @@ type options struct {
 	platform string
 	language string
 	help     bool
+	doctor   bool
 }
 
 // parse accepts options on either side of the problem ID.
 func parse(args []string) (options, error) {
+	if len(args) > 0 && args[0] == "doctor" {
+		opts := options{doctor: true}
+		for _, arg := range args[1:] {
+			if arg != "-h" && arg != "--help" {
+				return options{}, fmt.Errorf("ct doctor accepts only --help")
+			}
+			opts.help = true
+		}
+		return opts, nil
+	}
 	var opts options
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

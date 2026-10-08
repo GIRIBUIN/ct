@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,7 @@ func TestSaveLoad(t *testing.T) {
 	}
 	want := Defaults(filepath.Join(base, "solutions"))
 	want.Platform, want.Language, want.Editor = "programmers", "python", "custom-code"
+	want.EditorProfile = "my coding profile"
 	if err := Save(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +68,28 @@ func TestSaveLoad(t *testing.T) {
 	got, err = Load(path)
 	if err != nil || got != want {
 		t.Fatalf("configuration changed: %+v, %v", got, err)
+	}
+}
+
+func TestLegacyConfigWithoutProfile(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, "config.json")
+	want := Defaults(filepath.Join(base, "solutions"))
+	data, err := json.Marshal(map[string]string{
+		"root": want.Root, "platform": want.Platform, "language": want.Language, "editor": want.Editor,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil || got != want || got.EditorProfile != "" {
+		t.Fatalf("legacy config = %+v, %v; want %+v", got, err, want)
+	}
+	if saved, err := os.ReadFile(path); err != nil || !bytes.Equal(saved, data) {
+		t.Fatalf("loading legacy config changed the file: %v", err)
 	}
 }
 

@@ -10,6 +10,10 @@ import (
 )
 
 const usage = `Usage: ct <problem> [-p <platform>] [-l <language>]
+       ct doctor
+
+Commands:
+  doctor  Diagnose tools, C++ capabilities, extensions and configuration (read-only)
 
 Platforms: codeforces (cf), programmers (pg)
 Languages: cpp (c++), python (py)
@@ -30,6 +34,9 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 		_, err := fmt.Fprint(output, usage)
 		return err
 	}
+	if opts.doctor {
+		return doctor(output)
+	}
 	path, err := config.Path()
 	if err != nil {
 		return err
@@ -37,7 +44,7 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 	return run(opts, input, output, path, editor.Open)
 }
 
-func run(opts options, input io.Reader, output io.Writer, configPath string, open func(string, string, string) error) error {
+func run(opts options, input io.Reader, output io.Writer, configPath string, open func(string, string, string, string) error) error {
 	cfg, err := config.LoadOrCreate(configPath, input, output)
 	if err != nil {
 		return err
@@ -62,5 +69,5 @@ func run(opts options, input io.Reader, output io.Writer, configPath string, ope
 	} else {
 		fmt.Fprintln(output, "Already exists:", target)
 	}
-	return open(cfg.Editor, cfg.Root, target)
+	return open(cfg.Editor, cfg.Root, target, cfg.EditorProfile)
 }

@@ -106,9 +106,9 @@ func TestRunFirstAndExistingSolution(t *testing.T) {
 			configPath := filepath.Join(base, "config", "config.json")
 			target := filepath.Join(root, tt.dir, tt.id, tt.file)
 			calls := 0
-			open := func(editor, folder, file string) error {
+			open := func(editor, folder, file, profile string) error {
 				calls++
-				if editor != "code" || folder != root || file != target {
+				if editor != "code" || folder != root || file != target || profile != "" {
 					t.Fatalf("editor args: %q %q %q", editor, folder, file)
 				}
 				if _, err := os.Stat(file); err != nil {
@@ -144,11 +144,43 @@ func TestEditorFailurePreservesCreatedSolution(t *testing.T) {
 	root := filepath.Join(base, "solutions")
 	configPath := filepath.Join(base, "config.json")
 	wantErr := errors.New("editor unavailable")
-	err := run(options{id: "71A"}, strings.NewReader(root+"\n"), &bytes.Buffer{}, configPath, func(string, string, string) error { return wantErr })
+	err := run(options{id: "71A"}, strings.NewReader(root+"\n"), &bytes.Buffer{}, configPath, func(string, string, string, string) error { return wantErr })
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("editor error lost: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "codeforces", "71A", "main.cpp")); err != nil {
 		t.Fatalf("created solution lost: %v", err)
+	}
+}
+
+func TestConfiguredProfileReachesEditor(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, "config.json")
+	cfg := config.Defaults(filepath.Join(base, "solutions"))
+	cfg.EditorProfile = "my coding profile"
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(cfg.Root, "codeforces", "71A", "main.cpp")
+	calls := 0
+	open := func(editor, root, file, profile string) error {
+		calls++
+		if editor != cfg.Editor || root != cfg.Root || file != target || profile != cfg.EditorProfile {
+			t.Fatalf("wrong editor arguments: %q %q %q %q", editor, root, file, profile)
+		}
+		return nil
+	}
+	if err := run(options{id: "71A"}, strings.NewReader(""), &bytes.Buffer{}, path, open); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("user solution"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(options{id: "71A"}, strings.NewReader(""), &bytes.Buffer{}, path, open); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil || string(data) != "user solution" || calls != 2 {
+		t.Fatalf("existing file not preserved/opened: %q, %v, calls=%d", data, err, calls)
 	}
 }

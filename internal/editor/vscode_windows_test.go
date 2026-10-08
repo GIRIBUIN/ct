@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -9,6 +10,19 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestWindowsExtensionQuery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fake code & cli.cmd")
+	data := "@echo off\r\nif defined CT_CONFIG_DIR exit /b 9\r\nif not \"%1\"==\"--list-extensions\" exit /b 8\r\necho ms-vscode.cpptools\r\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CT_CONFIG_DIR", "test-config")
+	output, err := ListExtensions(context.Background(), path, "")
+	if err != nil || strings.TrimSpace(string(output)) != "ms-vscode.cpptools" {
+		t.Fatalf("extension query = %q, %v", output, err)
+	}
+}
 
 func TestWindowsEditorDiscoveryOrder(t *testing.T) {
 	base := t.TempDir()
@@ -109,15 +123,47 @@ func TestWindowsBatchPaths(t *testing.T) {
 	}
 	root := filepath.Join(base, "coding test 한글 & %PATH% !literal! (x)")
 	target := filepath.Join(root, "main.cpp")
-	output, err := launchCommand(editor, root, target).CombinedOutput()
+	output, err := launchCommand(editor, root, target, "").CombinedOutput()
 	if err != nil {
 		t.Fatalf("batch launch: %v, %s", err, output)
 	}
 	// cmd.exe uses the active Windows code page, so test ASCII path portions.
 	got := strings.ReplaceAll(string(output), "\r\n", "\n")
-	for _, marker := range []string{"--reuse-window\n", "--goto\n", "& %PATH% !literal! (x)", `main.cpp"`} {
+	for _, marker := range []string{"--reuse-window\n", "& %PATH% !literal! (x)", `main.cpp"`} {
 		if !strings.Contains(got, marker) {
 			t.Fatalf("path/argument was altered; missing %q in %q", marker, got)
+		}
+	}
+}
+
+func TestWindowsProfileArguments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fake code.cmd")
+	data := "@echo off\r\nif defined CT_CONFIG_DIR exit /b 9\r\necho %1\r\necho %2\r\necho %3\r\necho %4\r\necho %5\r\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	profile := "coding & %PATH% !profile! (x)"
+	cmd := launchCommand(path, "test root", "test root/main.cpp", profile)
+	cmd.Env = editorEnvironment(cmd.Environ())
+	output, err := cmd.CombinedOutput()
+	want := "--profile\n\"" + profile + "\"\n--reuse-window\n\"test root\"\n\"test root/main.cpp\"\n"
+	if err != nil || strings.ReplaceAll(string(output), "\r\n", "\n") != want {
+		t.Fatalf("profile launch = %q, %v; want %q", output, err, want)
+	}
+	t.Setenv("CT_CONFIG_DIR", "test-config")
+	output, err = ListExtensions(context.Background(), path, profile)
+	if err != nil || !strings.HasPrefix(strings.ReplaceAll(string(output), "\r\n", "\n"), "--profile\n\""+profile+"\"\n--list-extensions\n") {
+		t.Fatalf("profile extension query = %q, %v", output, err)
+	}
+}
+
+func TestWindowsUnsafeProfileRejected(t *testing.T) {
+	for _, profile := range []string{"bad\"profile", "bad\nprofile", "bad\x00profile"} {
+		if _, err := ListExtensions(context.Background(), "unused.cmd", profile); err == nil {
+			t.Fatalf("unsafe profile accepted: %q", profile)
+		}
+		if err := Open("unused.cmd", "root", "file", profile); err == nil {
+			t.Fatalf("unsafe launch profile accepted: %q", profile)
 		}
 	}
 }

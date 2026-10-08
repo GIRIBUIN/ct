@@ -1,9 +1,24 @@
 package editor
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
+
+func TestExtensionCommandArguments(t *testing.T) {
+	for _, profile := range []string{"", "my coding profile"} {
+		cmd := extensionCommand(context.Background(), "code.exe", profile)
+		want := []string{"code.exe"}
+		if profile != "" {
+			want = append(want, "--profile", profile)
+		}
+		want = append(want, "--list-extensions")
+		if !reflect.DeepEqual(cmd.Args, want) {
+			t.Fatalf("unexpected extension query: %q; want %q", cmd.Args, want)
+		}
+	}
+}
 
 func TestEditorEnvironment(t *testing.T) {
 	environment := []string{
@@ -23,9 +38,15 @@ func TestEditorEnvironment(t *testing.T) {
 }
 
 func TestLaunchArguments(t *testing.T) {
-	cmd := launchCommand("code.exe", "root with spaces", "root with spaces/main.cpp")
-	want := []string{"code.exe", "--reuse-window", "root with spaces", "--goto", "root with spaces/main.cpp"}
-	if !reflect.DeepEqual(cmd.Args, want) {
-		t.Fatalf("arguments = %q; want %q", cmd.Args, want)
+	for _, profile := range []string{"", "my coding profile"} {
+		cmd := launchCommand("code.exe", "root with spaces", "root with spaces/main.cpp", profile)
+		want := []string{"code.exe"}
+		if profile != "" {
+			want = append(want, "--profile", profile)
+		}
+		want = append(want, "--reuse-window", "root with spaces", "root with spaces/main.cpp")
+		if !reflect.DeepEqual(cmd.Args, want) {
+			t.Fatalf("arguments = %q; want %q", cmd.Args, want)
+		}
 	}
 }

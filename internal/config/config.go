@@ -14,10 +14,11 @@ import (
 )
 
 type Config struct {
-	Root     string `json:"root"`
-	Platform string `json:"platform"`
-	Language string `json:"language"`
-	Editor   string `json:"editor"`
+	Root          string `json:"root"`
+	Platform      string `json:"platform"`
+	Language      string `json:"language"`
+	Editor        string `json:"editor"`
+	EditorProfile string `json:"editor_profile,omitempty"`
 }
 
 func Defaults(root string) Config {
