@@ -9,12 +9,14 @@ import (
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/editor"
 	"github.com/GIRIBUIN/ct/internal/problem"
+	"github.com/GIRIBUIN/ct/internal/version"
 )
 
 const usage = `Usage: ct <problem> [-p <platform>] [-l <language>]
        ct doctor
        ct config
        ct setup [--yes] [--dry-run]
+       ct --version
 
 Commands:
   doctor  Diagnose tools, C++ capabilities, extensions and configuration (read-only)
@@ -38,6 +40,10 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 	}
 	if opts.help {
 		_, err := fmt.Fprint(output, usage)
+		return err
+	}
+	if opts.version {
+		_, err := fmt.Fprintln(output, "ct", version.Version)
 		return err
 	}
 	if opts.doctor {

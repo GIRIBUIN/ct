@@ -17,10 +17,14 @@ type options struct {
 	setup    bool
 	yes      bool
 	dryRun   bool
+	version  bool
 }
 
 // parse accepts options on either side of the problem ID.
 func parse(args []string) (options, error) {
+	if len(args) == 1 && args[0] == "--version" {
+		return options{version: true}, nil
+	}
 	if len(args) > 0 && args[0] == "setup" {
 		opts := options{setup: true}
 		for _, arg := range args[1:] {

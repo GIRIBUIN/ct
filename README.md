@@ -2,8 +2,102 @@
 
 Windows와 Linux에서 코딩 테스트 풀이 파일을 만들고 VS Code로 여는 Go CLI입니다.
 
+## 설치와 업데이트
+
+지원 대상은 **Windows amd64, Linux amd64, Linux arm64**입니다. 배포 바이너리를
+사용하면 Go, Git, 저장소 복제나 수동 빌드가 필요 없습니다. 아래 설치 명령은
+첫 GitHub Release가 게시된 뒤 사용할 수 있습니다.
+
+### Windows (PowerShell 5.1 이상)
+
+```powershell
+irm https://raw.githubusercontent.com/GIRIBUIN/ct/main/scripts/install.ps1 | iex
+ct --version
+ct config
+ct doctor
+ct setup
+ct 71A
+```
+
+최신 정식 릴리스의 `ct-windows-amd64.exe`를 SHA-256 검증 후
+`%LOCALAPPDATA%\Programs\ct\ct.exe`에 설치합니다. User PATH에 그 디렉터리만
+추가하고 현재 PowerShell에도 반영합니다. 기존 항목을 보존하고 대소문자·구분자를
+정규화해 중복을 피하며, 새 항목에 따옴표를 넣지 않습니다. 다른 터미널은 재시작해야
+할 수 있습니다. Machine PATH, 실행 정책은 바꾸지 않으며 관리자 권한도 필요 없습니다.
+업데이트는 **같은 설치 명령을 다시 실행**합니다. 검증된 파일을 같은 디렉터리에 준비한
+후 교체하며, 실행 중인 ct가 잠겨 있으면 종료하고 다시 시도하세요.
+
+일반 제거(설정 보존):
+
+```powershell
+irm https://raw.githubusercontent.com/GIRIBUIN/ct/main/scripts/uninstall.ps1 | iex
+```
+
+설정까지 제거하는 purge는 매개변수를 전달할 수 있는 ScriptBlock으로 실행합니다:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/GIRIBUIN/ct/main/scripts/uninstall.ps1))) -Purge
+```
+
+제거 스크립트는 설치 위치의 `ct.exe`, 비어 있는 설치 디렉터리, 해당 위치와 정확히
+일치하는 User/현재 프로세스 PATH 항목만 제거합니다.
+
+### Linux
+
 ```sh
-go build ./cmd/ct
+curl -fsSL https://raw.githubusercontent.com/GIRIBUIN/ct/main/scripts/install.sh | bash
+# PATH를 추가했다는 안내가 나오면 실행하거나 새 로그인 셸을 시작하세요.
+. "$HOME/.profile"
+ct --version
+ct config
+ct doctor
+ct setup
+ct 71A
+```
+
+`x86_64`/`amd64`는 `ct-linux-amd64`, `aarch64`/`arm64`는 `ct-linux-arm64`를
+선택해 `~/.local/bin/ct`에 설치합니다. Bash, curl과 `sha256sum` 또는 `shasum`이
+필요합니다. root/sudo는 사용하지 않습니다. `~/.local/bin`이 PATH에 없을 때만
+`~/.profile`에 표시된 ct PATH 블록을 한 번 추가합니다. 파이프로 실행된 설치 스크립트는
+부모 셸의 PATH를 바꿀 수 없으므로 로그인 셸을 새로 열거나 위처럼 파일을 읽어야 합니다.
+`~/.bash_profile`만 읽는 셸 등에서는 해당 파일이 `~/.profile`을 읽는지도 확인하세요.
+업데이트는 **같은 설치 명령을 다시 실행**합니다.
+
+일반 제거와 설정까지 제거하는 purge:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/GIRIBUIN/ct/main/scripts/uninstall.sh | bash
+# 또는:
+curl -fsSL https://raw.githubusercontent.com/GIRIBUIN/ct/main/scripts/uninstall.sh | bash -s -- --purge
+```
+
+Linux 제거는 `~/.local/bin/ct`와 설치 스크립트가 추가한 정확한 PATH 블록만 제거합니다.
+사용자가 수정한 블록과 다른 셸 설정은 보존합니다. `~/.local/bin` 안의 다른 파일은
+건드리지 않습니다.
+
+### 검증과 보존 범위
+
+두 설치 스크립트는 HTTPS로 바이너리와 `checksums.txt`를 임시 위치에 내려받고,
+정확한 자산 이름에 해당하는 SHA-256 항목이 하나인지 확인합니다. 해시가 다르거나
+항목이 없거나 중복이면 기존 설치와 PATH를 변경하지 않고 실패합니다. 파일은 검증 후
+실행 권한과 버전을 확인하고 교체합니다. 설치는 ct 자체만 담당하며 `ct setup`을
+자동으로 실행하지 않습니다. 설정은 `ct config`, 환경 진단은 `ct doctor`, 코딩 테스트
+의존성 준비는 `ct setup`으로 각각 수행합니다.
+
+기본 제거는 설정을 보존합니다. purge도 **기본 설정 위치의 `config.json`과 비어 있는
+ct 디렉터리만** 제거합니다. Windows는 `%APPDATA%\ct`, Linux는
+`$XDG_CONFIG_HOME/ct` 또는 `~/.config/ct`입니다. `CT_CONFIG_DIR`는 purge 대상 선택에
+사용하지 않으며 별도 경로는 보존한다고 안내합니다. 기본 위치에 다른 파일이 있으면
+디렉터리를 보존합니다. 심볼릭 링크·Windows junction을 따라 삭제하지 않습니다.
+풀이 루트는 읽거나 삭제하지 않으며 VS Code, 확장, GCC, GDB, MSYS2도 제거하지 않습니다.
+
+체크섬은 전송 손상과 바이너리/목록 불일치를 검출합니다. 스크립트와 체크섬 자체는
+이 GitHub 저장소 및 HTTPS를 신뢰하므로 독립된 서명 검증을 제공하지는 않습니다.
+설치 중 새 릴리스가 게시되어 파일과 체크섬이 어긋나면 실패하며 재실행하면 됩니다.
+
+## 사용법
+
+```sh
 ct 71A
 ct 71A -l py
 ct 71A --language python
@@ -17,9 +111,7 @@ ct setup --dry-run
 ct setup --yes
 ```
 
-빌드된 실행 파일을 PATH에 두면 `ct`로 실행할 수 있습니다. 현재 디렉터리에서
-직접 실행할 때는 Windows에서 `.\ct.exe`, Linux에서 `./ct`를 사용합니다.
-VS Code의 `code` 명령도 PATH에서 실행 가능해야 합니다.
+VS Code는 PATH에서 탐색하며 Windows에서는 일반 사용자·시스템 설치 위치도 확인합니다.
 
 기본값은 플랫폼 `codeforces`, 언어 `cpp`, 편집기 `code`입니다.
 옵션은 문제 ID 앞뒤에 사용할 수 있으며 `--help`로 사용법을 확인합니다.
@@ -155,18 +247,54 @@ dry-run이 우선합니다. 계획을 만들 수 있으면 dry-run은 미지원 
 검증합니다. 환경이 준비되지 않았거나 작업이 실패하면 0이 아닌 종료 코드를 반환합니다.
 doctor는 계속 읽기 전용 진단이며 설치나 PATH 수정을 수행하지 않습니다.
 
-VS Code 자체 설치, Python 관리, 기존 비호환 컴파일러 교체, 릴리스·자체 업데이트 및
+VS Code 자체 설치, Python 관리, 기존 비호환 컴파일러 교체, CLI 자체 업데이트 및
 제출 자동화는 지원하지 않습니다. MSYS2의 임의 비등록 설치는 `MSYS2_ROOT`로 알려줄 수
 있습니다. 자동 설치 경로에 공백이 있거나 필요한 패키지 관리자가 없으면 수동 설치를
 안내합니다. 실제 설치에는 네트워크와 각 설치 도구의 권한이 필요합니다.
 
-검증:
+## 개발 및 릴리스
+
+소스에서 개발할 때만 `go.mod`에 명시된 Go가 필요합니다. 일반 개발 빌드의
+`ct --version`은 `ct dev`를 출력합니다. 릴리스는 소스를 수정하지 않고
+`-ldflags "-X github.com/GIRIBUIN/ct/internal/version.Version=<tag>"`로 버전을 주입합니다.
+
+유지관리자가 검증한 커밋에 태그를 만들어 푸시하면 됩니다:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml`은 `v*` 태그에만 실행됩니다. 태그의 정확한 소스를
+체크아웃하고 `go.mod` 버전으로 Windows/Linux 테스트와 vet를 실행합니다. 모두 성공하면
+`CGO_ENABLED=0`으로 세 바이너리를 만들고 SHA-256 목록과 함께 같은 태그의 Release에
+게시합니다. 프리릴리스 태그는 prerelease로 게시하여 최신 정식 설치 대상에서 제외합니다.
+테스트·빌드가 실패하면 게시하지 않습니다. 게시에는 공식 Actions와
+[GitHub CLI의 `gh release create --verify-tag`](https://cli.github.com/manual/gh_release_create)를 사용합니다.
+
+자산 이름은 고정입니다:
+
+```text
+ct-windows-amd64.exe
+ct-linux-amd64
+ct-linux-arm64
+checksums.txt
+```
+
+일반 브랜치 push/PR은 별도의 `ci.yml`에서 Windows/Linux 테스트, vet, 빌드와
+배포 스크립트 테스트만 수행합니다. 배포하지 않습니다. `ct update`, `ct uninstall`
+명령은 제공하지 않으며 업데이트·제거는 외부 스크립트를 사용합니다.
+
+로컬 검증:
 
 ```sh
 go test ./...
 go vet ./...
 go build ./cmd/ct
+git diff --check
 ```
 
-테스트는 임시 디렉터리와 가짜 편집기를 사용하며 실제 사용자 설정이나 풀이
-디렉터리를 변경하지 않습니다.
+PowerShell 스크립트 테스트는 `scripts/test-distribution.ps1`, Linux 테스트는
+`bash scripts/test-distribution.sh`입니다. 테스트는 임시 디렉터리, 모의 다운로드,
+모의 User PATH를 사용하며 실제 사용자 설정이나 풀이 디렉터리를 변경하지 않습니다.
+스크립트 테스트에는 테스트용 실행 파일을 빌드하기 위한 Go가 필요합니다.
