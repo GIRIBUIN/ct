@@ -60,6 +60,40 @@ ct_download() {
     curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$1" --output "$2"
 }
 
+ct_next_steps() {
+    printf 'Next:\n  ct config\n  ct doctor\n  ct setup --dry-run\n'
+}
+
+ct_open_onboarding_tty() {
+    # stdin may contain the installer itself (curl | bash). Open the controlling tty instead.
+    { exec 3<>/dev/tty; } 2>/dev/null
+}
+
+ct_onboard() (
+    local target=$1 base=${XDG_CONFIG_HOME:-$HOME/.config}
+    if [[ $base != /* ]]; then
+        echo 'ct is installed; canonical configuration location is unavailable.'
+        ct_next_steps
+        return 0
+    fi
+    if [[ -e $base/ct/config.json || -L $base/ct/config.json ]]; then return 0; fi
+    if ! ct_open_onboarding_tty; then
+        ct_next_steps
+        return 0
+    fi
+    # Subshell isolation preserves the caller's override and closes descriptor 3 on return.
+    unset CT_CONFIG_DIR
+    if ! "$target" config <&3 >&3; then
+        echo 'ct remains installed. Configuration was cancelled or failed.'
+        ct_next_steps
+        return 0
+    fi
+    if ! "$target" doctor <&3 >&3; then
+        printf 'ct is installed, but some coding-test environment checks failed.\nReview:\n  ct setup --dry-run\nInstall:\n  ct setup\n'
+    fi
+    return 0
+)
+
 ct_install() (
     set -euo pipefail
     local asset temp stage='' bin target
@@ -93,7 +127,9 @@ ct_install() (
            echo 'PATH entry added to ~/.profile. Run: . "$HOME/.profile" (or start a new login shell).' ;;
     esac
     "$target" --version
-    printf 'Installed: %s\nNext: ct config; ct doctor; ct setup\nRerun this installer to update ct.\n' "$target"
+    printf 'Installed: %s\n' "$target"
+    ct_onboard "$target"
+    echo 'Rerun this installer to update ct.'
 )
 
 # Sourcing defines helpers for isolated tests. A piped script has no BASH_SOURCE.

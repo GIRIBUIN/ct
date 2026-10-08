@@ -63,7 +63,7 @@ ct_uninstall() (
     fi
     echo 'ct removed. Solution files and development tools were preserved.'
     if ! $purge; then echo 'ct configuration was preserved (use --purge to remove canonical config.json).'; fi
-    echo 'Start a new shell to refresh PATH; other entries in ~/.local/bin are unchanged.'
+    echo 'Start a new shell, or run: hash -r. Other entries in ~/.local/bin are unchanged.'
 )
 
 if [[ ${BASH_SOURCE[0]:-} == "$0" || -z ${BASH_SOURCE[0]:-} ]]; then ct_uninstall "$@"; fi

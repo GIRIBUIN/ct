@@ -47,6 +47,56 @@ function Receive-CtFile([string]$Url, [string]$Destination) {
     Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination
 }
 
+function Test-CtInteractiveConsole {
+    try { return [Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected }
+    catch { return $false }
+}
+
+function Show-CtNextSteps {
+    Write-Host "Next:`n  ct config`n  ct doctor`n  ct setup --dry-run"
+}
+
+function Invoke-CtOnboardingCommand([string]$Target, [string]$Command) {
+    & $Target $Command | Out-Host
+    $result = $LASTEXITCODE
+    # A failed optional diagnosis must not leave installation looking unsuccessful.
+    $global:LASTEXITCODE = 0
+    return $result
+}
+
+function Start-CtOnboarding([string]$Target) {
+    if (-not $env:APPDATA -or -not [IO.Path]::IsPathRooted($env:APPDATA)) {
+        Write-Host 'ct is installed; canonical configuration location is unavailable.'
+        Show-CtNextSteps
+        return
+    }
+    if (Test-Path -LiteralPath (Join-Path $env:APPDATA 'ct\config.json')) { return }
+    if (-not (Test-CtInteractiveConsole)) {
+        Show-CtNextSteps
+        return
+    }
+    $previousConfigDir = $env:CT_CONFIG_DIR
+    $phase = 'config'
+    try {
+        # Installer onboarding always uses canonical configuration, not a development override.
+        $env:CT_CONFIG_DIR = $null
+        if ((Invoke-CtOnboardingCommand $Target 'config') -ne 0) {
+            Write-Host 'ct remains installed. Configuration was cancelled or failed.'
+            Show-CtNextSteps
+            return
+        }
+        $phase = 'doctor'
+        if ((Invoke-CtOnboardingCommand $Target 'doctor') -ne 0) {
+            Write-Host "ct is installed, but some coding-test environment checks failed.`nReview:`n  ct setup --dry-run`nInstall:`n  ct setup"
+        }
+    } catch {
+        Write-Host "ct remains installed. Onboarding $phase failed: $_"
+        Show-CtNextSteps
+    } finally {
+        $env:CT_CONFIG_DIR = $previousConfigDir
+    }
+}
+
 function Install-Ct {
     $ErrorActionPreference = 'Stop'
     if ($env:OS -ne 'Windows_NT') { throw 'This installer requires Windows.' }
@@ -75,7 +125,7 @@ function Install-Ct {
         Assert-CtPlainPath $target
         $stage = Join-Path $installDir ('.ct-' + [Guid]::NewGuid().ToString('N') + '.exe')
         [IO.File]::Copy($download, $stage, $false)
-        & $stage --version
+        & $stage --version | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Downloaded ct failed its version check; existing binary preserved.' }
         if (Test-Path -LiteralPath $target) {
             # PowerShell 5.1 coerces $null to an empty string for this .NET method.
@@ -90,7 +140,7 @@ function Install-Ct {
         & $target --version
         if ($LASTEXITCODE -ne 0) { throw 'Installed ct failed its version check.' }
         Write-Host "Installed: $target"
-        Write-Host 'Next: ct config; ct doctor; ct setup'
+        Start-CtOnboarding $target
         Write-Host 'Other terminals may need restarting. Rerun this installer to update ct.'
     } finally {
         [Net.ServicePointManager]::SecurityProtocol = $oldTls

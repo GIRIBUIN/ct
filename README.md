@@ -84,6 +84,21 @@ Linux 제거는 `~/.local/bin/ct`와 설치 스크립트가 추가한 정확한 
 자동으로 실행하지 않습니다. 설정은 `ct config`, 환경 진단은 `ct doctor`, 코딩 테스트
 의존성 준비는 `ct setup`으로 각각 수행합니다.
 
+기본 설정 파일이 없는 **대화형 최초 설치**에서는 설치된 바이너리의 전체 경로로
+`ct config`를 실행하고, 성공하면 `ct doctor`를 실행합니다. Windows는 콘솔 입출력이
+사용 가능한 경우에만 진행합니다. Linux는 `curl ... | bash`의 파이프 입력을 읽지 않고
+`/dev/tty`를 열어 config와 doctor의 입출력에 연결합니다. 터미널을 사용할 수 없으면
+온보딩을 건너뛰고 `ct config`, `ct doctor`, `ct setup --dry-run`을 안내합니다.
+위 예제의 수동 설정·진단 명령은 자동 온보딩을 건너뛰었거나 다시 실행하려는 경우에
+사용하면 됩니다.
+
+최초 설치 여부는 바이너리 유무가 아니라 아래 기본 위치의 `config.json` 유무로
+판단합니다. 기존 설정이 있으면 재설치·업데이트 시 위저드와 doctor를 다시 실행하지
+않습니다. 자동 온보딩 중에는 `CT_CONFIG_DIR`를 제외하여 기본 설정 위치를 사용하고,
+완료 후 호출 환경의 값은 보존합니다. config 취소·실패 시 doctor를 실행하지 않으며
+설치된 ct도 유지합니다. doctor가 문제를 보고해도 설치 실패로 처리하지 않고
+`ct setup --dry-run`으로 검토한 뒤 `ct setup`을 직접 실행하도록 안내합니다.
+
 기본 제거는 설정을 보존합니다. purge도 **기본 설정 위치의 `config.json`과 비어 있는
 ct 디렉터리만** 제거합니다. Windows는 `%APPDATA%\ct`, Linux는
 `$XDG_CONFIG_HOME/ct` 또는 `~/.config/ct`입니다. `CT_CONFIG_DIR`는 purge 대상 선택에

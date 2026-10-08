@@ -41,6 +41,22 @@ try {
     function Set-CtUserPath([string]$Value) { $script:fakeUserPath = $Value }
     function Get-CtRemovalUserPath { return $script:fakeUserPath }
     function Set-CtRemovalUserPath([string]$Value) { $script:fakeUserPath = $Value }
+    $script:interactive = $false
+    $script:onboardingCalls = @()
+    $script:configExit = 0
+    $script:doctorExit = 0
+    function Test-CtInteractiveConsole { return $script:interactive }
+    function Invoke-CtOnboardingCommand([string]$Target, [string]$Command) {
+        Assert-Equal $Target (Join-Path $env:LOCALAPPDATA 'Programs\ct\ct.exe')
+        Assert-Equal (Test-Path -LiteralPath $Target) $true
+        Assert-Equal ([string]$env:CT_CONFIG_DIR) ''
+        $script:onboardingCalls += $Command
+        switch ($Command) {
+            'config' { return $script:configExit }
+            'doctor' { return $script:doctorExit }
+            default { throw "Unexpected automatic command: $Command" }
+        }
+    }
     function Receive-CtFile([string]$Url, [string]$Destination) {
         if (-not $Url.StartsWith('https://github.com/GIRIBUIN/ct/releases/latest/download/')) { throw 'Unexpected download URL.' }
         if ($Url.EndsWith('/checksums.txt')) {
@@ -66,6 +82,7 @@ try {
     Assert-Throws { Assert-CtChecksum $fixture $manifest 'ct-windows-amd64.exe' }
 
     Install-Ct
+    Assert-Equal $script:onboardingCalls.Count 0
     $installed = Join-Path $env:LOCALAPPDATA 'Programs\ct\ct.exe'
     $firstPath = $script:fakeUserPath
     Install-Ct
@@ -79,6 +96,29 @@ try {
     $canonical = Get-CtCanonicalConfig $env:APPDATA
     $null = [IO.Directory]::CreateDirectory($canonical)
     $null = [IO.Directory]::CreateDirectory($env:CT_CONFIG_DIR)
+    # An override config must not suppress fresh canonical onboarding.
+    [IO.File]::WriteAllText((Join-Path $env:CT_CONFIG_DIR 'config.json'), 'override preserved')
+    $script:badHash = $false
+    $script:interactive = $true
+    foreach ($scenario in @('fresh', 'config-failed', 'doctor-failed', 'existing')) {
+        $script:onboardingCalls = @()
+        $script:configExit = 0
+        $script:doctorExit = 0
+        if ($scenario -eq 'config-failed') { $script:configExit = 1 }
+        if ($scenario -eq 'doctor-failed') { $script:doctorExit = 1 }
+        if ($scenario -eq 'existing') { [IO.File]::WriteAllText((Join-Path $canonical 'config.json'), 'existing preserved') }
+        $output = @(Install-Ct 6>&1)
+        Assert-Equal (@($output | Where-Object { "$_" -eq 'ct dev' }).Count) 1
+        $expected = 'config,doctor'
+        if ($scenario -eq 'config-failed') { $expected = 'config' }
+        if ($scenario -eq 'existing') { $expected = '' }
+        Assert-Equal ($script:onboardingCalls -join ',') $expected
+        Assert-Equal (Get-FileHash -LiteralPath $installed).Hash $hash
+        Assert-Equal $env:CT_CONFIG_DIR (Join-Path $testRoot 'solutions')
+        if ($scenario -eq 'doctor-failed' -and ($output -join "`n") -notmatch 'ct setup --dry-run') { throw 'Missing setup guidance.' }
+    }
+    Assert-Equal ([IO.File]::ReadAllText((Join-Path $canonical 'config.json'))) 'existing preserved'
+    Assert-Equal ([IO.File]::ReadAllText((Join-Path $env:CT_CONFIG_DIR 'config.json'))) 'override preserved'
     [IO.File]::WriteAllText((Join-Path $canonical 'config.json'), '{}')
     [IO.File]::WriteAllText((Join-Path $canonical 'main.cpp'), 'keep canonical sibling')
     [IO.File]::WriteAllText((Join-Path $env:CT_CONFIG_DIR 'main.cpp'), 'keep solutions')
