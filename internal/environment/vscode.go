@@ -1,13 +1,11 @@
 package environment
 
-import "strings"
+import (
+	"github.com/GIRIBUIN/ct/internal/language"
+	"strings"
+)
 
-var RequiredExtensions = []struct{ Name, ID string }{
-	{"C/C++", "ms-vscode.cpptools"},
-	{"CPH", "divyanshuagrawal.competitive-programming-helper"},
-}
-
-func (c checker) checkExtensions(code, profile string, lookupErr error) []Check {
+func (c checker) checkExtensions(code, profile string, lookupErr error, selected string) []Check {
 	var results []Check
 	installed := make(map[string]bool)
 	queryFailed := lookupErr != nil
@@ -22,7 +20,7 @@ func (c checker) checkExtensions(code, profile string, lookupErr error) []Check 
 			}
 		}
 	}
-	for _, extension := range RequiredExtensions {
+	for _, extension := range language.Extensions(selected) {
 		result := Check{"VS Code Extensions", extension.Name, OK, extension.ID}
 		if queryFailed {
 			result.Status, result.Detail = Skip, extension.ID+" (extension list unavailable)"

@@ -15,6 +15,8 @@ func TestFirstRunWizardAndAliases(t *testing.T) {
 	for _, tt := range []struct{ input, platform, language string }{
 		{"\n\n\n", "codeforces", "cpp"},
 		{"pg\npy\n\n", "programmers", "python"},
+		{"pg\njava\n\n", "programmers", "java"},
+		{"cf\nrs\n\n", "codeforces", "rust"},
 		{"cf\nc++\n\n", "codeforces", "cpp"},
 		{"invalid-platform\npg\ninvalid-language\npy\n\n", "programmers", "python"},
 	} {

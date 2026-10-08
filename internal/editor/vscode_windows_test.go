@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -9,7 +10,35 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestWindowsInstallAndVerifyNonInteractive(t *testing.T) {
+	cli := filepath.Join(t.TempDir(), "fake code & cli.cmd")
+	data := "@echo off\r\nif defined CT_CONFIG_DIR exit /b 9\r\n" +
+		"if \"%~1\"==\"--profile\" (\r\nif not \"%~2\"==\"coding test\" exit /b 8\r\nshift\r\nshift\r\n)\r\n" +
+		"if \"%~1\"==\"--list-extensions\" (\r\necho redhat.java\r\nexit /b 0\r\n)\r\n" +
+		"if not \"%~1\"==\"--install-extension\" exit /b 7\r\n" +
+		"if not \"%~2\"==\"redhat.java\" exit /b 6\r\n" +
+		"set /p extra=\r\nif defined extra exit /b 5\r\necho successfully installed\r\nexit /b 0\r\n"
+	if err := os.WriteFile(cli, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CT_CONFIG_DIR", "test-config")
+	for _, profile := range []string{"", "coding test"} {
+		t.Run(profile, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			var output bytes.Buffer
+			if err := InstallExtension(ctx, cli, profile, "redhat.java", &output); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(output.String(), "successfully installed") {
+				t.Fatalf("output = %q", output.String())
+			}
+		})
+	}
+}
 
 func TestWindowsExtensionQuery(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "fake code & cli.cmd")

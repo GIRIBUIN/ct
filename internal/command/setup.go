@@ -13,7 +13,7 @@ import (
 
 func setup(opts options, input io.Reader, output io.Writer) error {
 	reader := bufio.NewReader(input)
-	return runSetup(opts, reader, output, environment.Diagnose, func(checks []environment.Check) (installer.Plan, error) {
+	return runSetup(opts, reader, output, func() []environment.Check { return environment.Diagnose(opts.language) }, func(checks []environment.Check) (installer.Plan, error) {
 		return installer.BuildPlan(checks, reader, output)
 	})
 }
@@ -21,6 +21,11 @@ func setup(opts options, input io.Reader, output io.Writer) error {
 func runSetup(opts options, input io.Reader, output io.Writer, diagnose func() []environment.Check, build func([]environment.Check) (installer.Plan, error)) error {
 	fmt.Fprintln(output, "Checking environment...")
 	checks := diagnose()
+	for _, check := range checks {
+		if check.Section == "Language" {
+			fmt.Fprintf(output, "Selected language: %s\n", check.Detail)
+		}
+	}
 	missing := false
 	for _, check := range checks {
 		if check.Status == environment.Fail {

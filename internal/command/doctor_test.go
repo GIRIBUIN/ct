@@ -15,7 +15,7 @@ func TestDoctorParsing(t *testing.T) {
 			t.Fatalf("doctor parsed as problem: %+v, %v", opts, err)
 		}
 	}
-	for _, args := range [][]string{{"doctor", "71A"}, {"doctor", "-l", "py"}, {"doctor", "--unknown"}} {
+	for _, args := range [][]string{{"doctor", "71A"}, {"doctor", "-l", "kotlin"}, {"doctor", "--unknown"}} {
 		if _, err := parse(args); err == nil {
 			t.Fatalf("invalid doctor arguments accepted: %v", args)
 		}

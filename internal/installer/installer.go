@@ -14,6 +14,7 @@ import (
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/editor"
 	"github.com/GIRIBUIN/ct/internal/environment"
+	"github.com/GIRIBUIN/ct/internal/language"
 )
 
 type Action struct {
@@ -91,12 +92,7 @@ func BuildPlan(checks []environment.Check, input io.Reader, output io.Writer) (P
 		installExtension: func(path, profile, id string) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
-			cmd, err := editor.InstallExtensionCommand(ctx, path, profile, id)
-			if err != nil {
-				return err
-			}
-			cmd.Stdin, cmd.Stdout, cmd.Stderr = input, output, output
-			return cmd.Run()
+			return editor.InstallExtension(ctx, path, profile, id, output)
 		},
 	}
 	return h.plan(checks)
@@ -117,21 +113,46 @@ func (h host) commandAction(id, description string, c invocation, dependencies .
 
 func (h host) plan(checks []environment.Check) (Plan, error) {
 	var plan Plan
-	missingCompiler := lookupCheck(checks, "g++").Status == environment.Fail
-	missingDebugger := lookupCheck(checks, "GDB").Status == environment.Fail
-	if missingCompiler || missingDebugger {
-		switch h.goos {
-		case "windows":
-			h.planWindows(&plan, missingCompiler, missingDebugger)
-		case "linux":
-			h.planLinux(&plan, missingCompiler, missingDebugger)
-		default:
-			plan.Notes = append(plan.Notes, "Automatic toolchain installation is unsupported on "+h.goos+". Install g++ and GDB manually, then run ct doctor.")
+	selected := lookupCheck(checks, "selected").Detail
+	if selected == "" {
+		selected = "cpp"
+	}
+	if _, err := language.Lookup(selected); err != nil {
+		return plan, err
+	}
+	if selected == "cpp" {
+		missingCompiler := lookupCheck(checks, "g++").Status == environment.Fail
+		missingDebugger := lookupCheck(checks, "GDB").Status == environment.Fail
+		if missingCompiler || missingDebugger {
+			switch h.goos {
+			case "windows":
+				h.planWindows(&plan, missingCompiler, missingDebugger)
+			case "linux":
+				h.planLinux(&plan, missingCompiler, missingDebugger)
+			default:
+				plan.Notes = append(plan.Notes, "Automatic toolchain installation is unsupported on "+h.goos+". Install g++ and GDB manually, then run ct doctor.")
+			}
+		}
+		for _, name := range []string{"C++20 compile", "bits/stdc++.h"} {
+			if lookupCheck(checks, name).Status == environment.Fail {
+				plan.Notes = append(plan.Notes, name+" failed with an existing compiler. Repair/select a compatible GCC toolchain manually; setup will not replace it.")
+			}
 		}
 	}
-	for _, name := range []string{"C++20 compile", "bits/stdc++.h"} {
-		if lookupCheck(checks, name).Status == environment.Fail {
-			plan.Notes = append(plan.Notes, name+" failed with an existing compiler. Repair/select a compatible GCC toolchain manually; setup will not replace it.")
+	switch selected {
+	case "java":
+		if lookupCheck(checks, "java").Status == environment.Fail || lookupCheck(checks, "javac").Status == environment.Fail {
+			h.planJava(&plan)
+		} else if lookupCheck(checks, "Java 17+ compile").Status == environment.Fail {
+			plan.Notes = append(plan.Notes, "Java compilation failed with an existing JDK. Repair its configuration and run ct doctor -l java; setup will not reinstall healthy java/javac commands.")
+		}
+	case "rust":
+		if lookupCheck(checks, "rustc").Status == environment.Fail || lookupCheck(checks, "Rust 2021 compile").Status == environment.Fail {
+			plan.Notes = append(plan.Notes, "Install/configure stable Rust manually using the official instructions at https://rustup.rs/ (including the platform linker), reopen your terminal, then run ct doctor -l rust. ct does not automatically install rustup or Rust toolchains.")
+		}
+	case "python":
+		if lookupCheck(checks, "Python interpreter").Status == environment.Fail {
+			plan.Notes = append(plan.Notes, "Install Python 3 manually from https://www.python.org/downloads/ and enable its CLI, then run ct doctor -l python. Python runtime installation is not automated.")
 		}
 	}
 	if lookupCheck(checks, "code CLI").Status != environment.OK {
@@ -139,7 +160,7 @@ func (h host) plan(checks []environment.Check) (Plan, error) {
 	} else if lookupCheck(checks, "extension query").Status == environment.Fail {
 		plan.Notes = append(plan.Notes, "Extension query failed; installation state is unknown. Fix the VS Code CLI/profile and rerun ct doctor.")
 	} else {
-		for _, extension := range environment.RequiredExtensions {
+		for _, extension := range language.Extensions(selected) {
 			if lookupCheck(checks, extension.Name).Status != environment.Fail {
 				continue
 			}

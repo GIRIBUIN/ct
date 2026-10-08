@@ -3,6 +3,17 @@ package installer
 import "strings"
 
 func (h host) planLinux(plan *Plan, compiler, debugger bool) {
+	packages := []string{}
+	if compiler {
+		packages = append(packages, "build-essential")
+	}
+	if debugger {
+		packages = append(packages, "gdb")
+	}
+	h.planAPT(plan, packages)
+}
+
+func (h host) planAPT(plan *Plan, packages []string) {
 	data, err := h.readFile("/etc/os-release")
 	if err != nil {
 		plan.Notes = append(plan.Notes, "Cannot read /etc/os-release; automatic toolchain installation is unsupported.")
@@ -33,17 +44,10 @@ func (h host) planLinux(plan *Plan, compiler, debugger bool) {
 	if h.uid() != 0 {
 		sudo, err := h.lookup("sudo")
 		if err != nil {
-			plan.Notes = append(plan.Notes, "sudo is unavailable. Ask an administrator to install the missing build-essential/gdb packages.")
+			plan.Notes = append(plan.Notes, "sudo is unavailable. Ask an administrator to install: "+strings.Join(packages, ", "))
 			return
 		}
 		command = func(args ...string) invocation { return invocation{path: sudo, args: append([]string{apt}, args...)} }
-	}
-	packages := []string{}
-	if compiler {
-		packages = append(packages, "build-essential")
-	}
-	if debugger {
-		packages = append(packages, "gdb")
 	}
 	plan.Actions = append(plan.Actions,
 		h.commandAction("apt-update", "Refresh apt package indexes (may request sudo authentication)", command("update")),

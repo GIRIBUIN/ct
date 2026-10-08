@@ -25,6 +25,9 @@ func TestParse(t *testing.T) {
 		{[]string{"181188", "-p", "pg", "-l", "py"}, options{id: "181188", platform: "programmers", language: "python"}},
 		{[]string{"-l", "c++", "71A", "--platform=cf"}, options{id: "71A", platform: "codeforces", language: "cpp"}},
 		{[]string{"--help"}, options{help: true}},
+		{[]string{"71A", "-l=java"}, options{id: "71A", language: "java"}},
+		{[]string{"-l", "rs", "71A"}, options{id: "71A", language: "rust"}},
+		{[]string{"181188", "-p", "pg", "-l", "rust"}, options{id: "181188", platform: "programmers", language: "rust"}},
 	} {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
 			got, err := parse(tt.args)
@@ -33,7 +36,7 @@ func TestParse(t *testing.T) {
 			}
 		})
 	}
-	for _, args := range [][]string{nil, {"71A", "72A"}, {"71A", "-l"}, {"71A", "-p", "-l", "py"}, {"71A", "--unknown"}, {"71A", "-p", "bad"}, {"71A", "-l=java"}, {"71A", "-l="}} {
+	for _, args := range [][]string{nil, {"71A", "72A"}, {"71A", "-l"}, {"71A", "-p", "-l", "py"}, {"71A", "--unknown"}, {"71A", "-p", "bad"}, {"71A", "-l=kotlin"}, {"71A", "-l="}} {
 		if _, err := parse(args); err == nil {
 			t.Errorf("invalid arguments accepted: %v", args)
 		}
@@ -47,6 +50,10 @@ func TestCreateTemplatesAndPreserveExisting(t *testing.T) {
 		{"codeforces", "python", "71A", "def solve():"},
 		{"programmers", "cpp", "181188", "int solution()"},
 		{"programmers", "python", "181188", "def solution():"},
+		{"codeforces", "java", "71A", "public class Main"},
+		{"codeforces", "rust", "71A", "fn solve("},
+		{"programmers", "java", "181188", "public void solution()"},
+		{"programmers", "rust", "181188", "pub fn solution()"},
 	} {
 		t.Run(tt.platform+"/"+tt.language, func(t *testing.T) {
 			target, err := problem.Target(root, tt.platform, tt.language, tt.id)

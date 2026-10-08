@@ -11,6 +11,7 @@ import (
 
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/editor"
+	"github.com/GIRIBUIN/ct/internal/language"
 )
 
 type Check struct {
@@ -37,13 +38,15 @@ type checker struct {
 	configPath func() (string, error)
 }
 
-func Diagnose() []Check {
+func Diagnose(selected ...string) []Check {
 	c := checker{
 		lookup: exec.LookPath, findEditor: editor.Find, configPath: config.Path,
 		run: func(path string, args ...string) ([]byte, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, path, args...)
+			// rustup proxies must not auto-install toolchains during read-only diagnosis.
+			cmd.Env = append(os.Environ(), "RUSTUP_AUTO_INSTALL=0")
 			cmd.WaitDelay = time.Second
 			return cmd.CombinedOutput()
 		},
@@ -53,30 +56,38 @@ func Diagnose() []Check {
 			return editor.ListExtensions(ctx, path, profile)
 		},
 	}
-	return c.check()
+	return c.check(selected...)
 }
 
-func (c checker) check() []Check {
+func (c checker) check(override ...string) []Check {
 	configuration, editorName, profile := c.configuration()
 	results := []Check{{"System", "OS", OK, runtime.GOOS + "/" + runtime.GOARCH}}
+	selected := "cpp"
+	for _, check := range configuration {
+		if check.Name == "language" && check.Status == OK {
+			selected = check.Detail
+		}
+	}
+	if len(override) > 0 && override[0] != "" {
+		selected = override[0]
+	}
+	definition, languageErr := language.Lookup(selected)
+	if languageErr != nil {
+		results = append(results, Check{"Language", "selected", Fail, languageErr.Error()})
+	} else {
+		selected = definition.Name
+		results = append(results, Check{"Language", "selected", OK, selected})
+	}
 	code, codeErr := c.findEditor(editorName)
 	if codeErr != nil {
 		results = append(results, Check{"Tools", "code CLI", Fail, "not found: " + codeErr.Error()})
 	} else {
 		results = append(results, Check{"Tools", "code CLI", OK, code})
 	}
-	compiler, compilerErr := c.lookup("g++")
-	results = append(results, c.tool("g++", compiler, compilerErr))
-	debugger, debuggerErr := c.lookup("gdb")
-	results = append(results, c.tool("GDB", debugger, debuggerErr))
-	if compilerErr != nil {
-		results = append(results,
-			Check{"Capabilities", "C++20 compile", Skip, "g++ unavailable"},
-			Check{"Capabilities", "bits/stdc++.h", Skip, "g++ unavailable"})
-	} else {
-		results = append(results, c.compile(compiler)...)
+	if languageErr == nil {
+		results = append(results, c.languageChecks(selected)...)
 	}
-	results = append(results, c.checkExtensions(code, profile, codeErr)...)
+	results = append(results, c.checkExtensions(code, profile, codeErr, selected)...)
 	return append(results, configuration...)
 }
 

@@ -8,8 +8,8 @@ import (
 	"github.com/GIRIBUIN/ct/internal/environment"
 )
 
-func doctor(output io.Writer) error {
-	return reportDoctor(output, environment.Diagnose())
+func doctor(output io.Writer, language string) error {
+	return reportDoctor(output, environment.Diagnose(language))
 }
 
 func reportDoctor(output io.Writer, checks []environment.Check) error {

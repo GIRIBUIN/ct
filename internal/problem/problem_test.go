@@ -20,7 +20,7 @@ func TestNormalizePlatform(t *testing.T) {
 }
 
 func TestNormalizeLanguage(t *testing.T) {
-	for alias, want := range map[string]string{"cpp": "cpp", "c++": "cpp", "py": "python", "python": "python"} {
+	for alias, want := range map[string]string{"cpp": "cpp", "c++": "cpp", "py": "python", "python": "python", "java": "java", "rust": "rust", "rs": "rust"} {
 		t.Run(alias, func(t *testing.T) {
 			got, err := NormalizeLanguage(alias)
 			if err != nil || got != want {
@@ -28,7 +28,7 @@ func TestNormalizeLanguage(t *testing.T) {
 			}
 		})
 	}
-	if _, err := NormalizeLanguage("java"); err == nil {
+	if _, err := NormalizeLanguage("kotlin"); err == nil {
 		t.Fatal("unsupported language accepted")
 	}
 }
@@ -41,6 +41,10 @@ func TestTarget(t *testing.T) {
 		{"pg", "c++", "181188", "programmers", "solution.cpp"},
 		{"programmers", "python", "181188", "programmers", "solution.py"},
 		{"cf", "cpp", "123A1", "codeforces", "main.cpp"},
+		{"cf", "java", "71A", "codeforces", "Main.java"},
+		{"cf", "rs", "71A", "codeforces", "main.rs"},
+		{"pg", "java", "181188", "programmers", "Solution.java"},
+		{"pg", "rust", "181188", "programmers", "solution.rs"},
 	} {
 		t.Run(tt.dir+tt.filename+tt.id, func(t *testing.T) {
 			got, err := Target(root, tt.platform, tt.language, tt.id)

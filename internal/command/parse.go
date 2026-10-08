@@ -25,31 +25,8 @@ func parse(args []string) (options, error) {
 	if len(args) == 1 && args[0] == "--version" {
 		return options{version: true}, nil
 	}
-	if len(args) > 0 && args[0] == "setup" {
-		opts := options{setup: true}
-		for _, arg := range args[1:] {
-			switch arg {
-			case "--yes":
-				opts.yes = true
-			case "--dry-run":
-				opts.dryRun = true
-			case "-h", "--help":
-				opts.help = true
-			default:
-				return options{}, fmt.Errorf("unknown setup option %q (use --yes or --dry-run)", arg)
-			}
-		}
-		return opts, nil
-	}
-	if len(args) > 0 && (args[0] == "doctor" || args[0] == "config") {
-		opts := options{doctor: args[0] == "doctor", config: args[0] == "config"}
-		for _, arg := range args[1:] {
-			if arg != "-h" && arg != "--help" {
-				return options{}, fmt.Errorf("ct %s accepts only --help", args[0])
-			}
-			opts.help = true
-		}
-		return opts, nil
+	if len(args) > 0 && (args[0] == "setup" || args[0] == "doctor" || args[0] == "config") {
+		return parseCommand(args)
 	}
 	var opts options
 	for i := 0; i < len(args); i++ {
@@ -90,6 +67,37 @@ func parse(args []string) (options, error) {
 	}
 	if opts.id == "" && !opts.help {
 		return options{}, fmt.Errorf("a problem ID is required\n%s", usage)
+	}
+	return opts, nil
+}
+
+func parseCommand(args []string) (options, error) {
+	opts := options{setup: args[0] == "setup", doctor: args[0] == "doctor", config: args[0] == "config"}
+	for i := 1; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(args[i], "=")
+		switch {
+		case !hasValue && (name == "--help" || name == "-h"):
+			opts.help = true
+		case opts.setup && !hasValue && name == "--yes":
+			opts.yes = true
+		case opts.setup && !hasValue && name == "--dry-run":
+			opts.dryRun = true
+		case !opts.config && (name == "-l" || name == "--language"):
+			if !hasValue {
+				i++
+				if i == len(args) || strings.HasPrefix(args[i], "-") {
+					return options{}, fmt.Errorf("option %s requires a language", name)
+				}
+				value = args[i]
+			}
+			var err error
+			opts.language, err = problem.NormalizeLanguage(value)
+			if err != nil {
+				return options{}, err
+			}
+		default:
+			return options{}, fmt.Errorf("unknown %s option %q", args[0], args[i])
+		}
 	}
 	return opts, nil
 }

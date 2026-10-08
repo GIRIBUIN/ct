@@ -13,23 +13,25 @@ import (
 )
 
 const usage = `Usage: ct <problem> [-p <platform>] [-l <language>]
-       ct doctor
+       ct doctor [-l <language>]
        ct config
-       ct setup [--yes] [--dry-run]
+       ct setup [-l <language>] [--yes] [--dry-run]
        ct --version
 
 Commands:
-  doctor  Diagnose tools, C++ capabilities, extensions and configuration (read-only)
+  doctor  Diagnose selected language tools, capabilities, extensions and configuration (read-only)
   config  Configure coding-test root, defaults and VS Code profile interactively
   setup   Plan and install missing components after approval (--dry-run previews only)
 
 Platforms: codeforces (cf), programmers (pg)
-Languages: cpp (c++), python (py)
+Languages: cpp (c++), python (py), java, rust (rs)
 Defaults: codeforces, cpp; editor: code
 
 Examples:
   ct 71A
   ct 71A -l py
+  ct 71A -l java
+  ct 71A -l rust
   ct 181188 --platform programmers --language python
 `
 
@@ -47,7 +49,7 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 		return err
 	}
 	if opts.doctor {
-		return doctor(output)
+		return doctor(output, opts.language)
 	}
 	if opts.setup {
 		return setup(opts, input, output)

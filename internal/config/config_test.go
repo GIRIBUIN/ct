@@ -70,6 +70,27 @@ func TestSaveLoad(t *testing.T) {
 	}
 }
 
+func TestNewLanguageDefaultsStoredCanonically(t *testing.T) {
+	for input, want := range map[string]string{"java": "java", "rust": "rust", "rs": "rust"} {
+		base := t.TempDir()
+		path := filepath.Join(base, "config.json")
+		cfg := Defaults(filepath.Join(base, "solutions"))
+		cfg.Language = input
+		if err := Save(path, cfg); err != nil {
+			t.Fatal(err)
+		}
+		data, _ := os.ReadFile(path)
+		var stored Config
+		if err := json.Unmarshal(data, &stored); err != nil || stored.Language != want {
+			t.Fatal(stored, err)
+		}
+		loaded, err := Load(path)
+		if err != nil || loaded.Language != want {
+			t.Fatal(loaded, err)
+		}
+	}
+}
+
 func TestLegacyConfigWithoutProfile(t *testing.T) {
 	base := t.TempDir()
 	path := filepath.Join(base, "config.json")

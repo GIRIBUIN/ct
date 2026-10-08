@@ -119,11 +119,19 @@ ct 71A --language python
 ct 181188 -p pg
 ct 181188 --platform programmers
 ct 181188 -p pg -l py
+ct 71A -l java
+ct 71A -l rust
+ct 181188 -p pg -l java
+ct 181188 -p pg -l rust
 ct config
 ct doctor
 ct setup
 ct setup --dry-run
 ct setup --yes
+ct doctor -l java
+ct doctor -l rust
+ct setup -l java --dry-run
+ct setup --dry-run -l rust
 ```
 
 VS Code는 PATH에서 탐색하며 Windows에서는 일반 사용자·시스템 설치 위치도 확인합니다.
@@ -137,6 +145,12 @@ VS Code는 PATH에서 탐색하며 Windows에서는 일반 사용자·시스템 
 | 플랫폼 | `pg`, `programmers` | `programmers` |
 | 언어 | `cpp`, `c++` | `cpp` |
 | 언어 | `py`, `python` | `python` |
+| 언어 | `java` | `java` |
+| 언어 | `rust`, `rs` | `rust` |
+
+ct는 심사 사이트의 지원 정책에 따라 언어 선택을 제한하지 않습니다. 사용자가 선택한
+언어의 로컬 작업 공간을 만듭니다. Codeforces와 Programmers 모두 네 언어를 사용할 수
+있으며, 같은 문제 디렉터리에 여러 언어의 풀이를 함께 보관할 수 있습니다.
 
 설정이 없는 상태로 문제를 열면 `ct initial configuration` 위저드가 루트,
 기본 플랫폼, 기본 언어, VS Code 프로필을 묻습니다. 저장 후 요청한 문제 파일을
@@ -188,13 +202,21 @@ CLI 옵션은 해당 실행에만 적용되고 저장된 기본값을 변경하�
 ```text
 <root>/codeforces/71A/main.cpp
 <root>/codeforces/71A/main.py
+<root>/codeforces/71A/Main.java
+<root>/codeforces/71A/main.rs
 <root>/programmers/181188/solution.cpp
 <root>/programmers/181188/solution.py
+<root>/programmers/181188/Solution.java
+<root>/programmers/181188/solution.rs
 ```
 
 템플릿은 `go:embed`로 실행 파일에 포함됩니다. Codeforces는 `solve()` 기반이며,
 Programmers는 `solution()` 골격만 제공합니다. Programmers의 반환형과 인자는
 문제에 맞게 직접 수정해야 합니다.
+Java는 Java 17 문법을 사용하며 Codeforces에는 BufferedReader/StringTokenizer와
+StringBuilder를 사용한 입력·출력 골격을 제공합니다. Rust는 외부 crate 없이 Rust 2021의
+토큰 입력·버퍼 출력 구조를 사용합니다. Programmers의 Java/Rust는 입출력 main 없이
+편집 가능한 `solution` 골격만 제공합니다.
 
 기존 풀이 파일은 덮어쓰거나 잘라내지 않습니다. 파일이 이미 있으면 이를 알리고
 그대로 엽니다. VS Code에는 `--reuse-window <root> <target>`을 전달하여
@@ -202,8 +224,9 @@ Programmers는 `solution()` 골격만 제공합니다. Programmers의 반환형�
 프로필이 설정되어 있으면 `--profile <editor_profile> --reuse-window <root> <target>`을
 전달합니다.
 
-`ct doctor`는 OS/아키텍처, VS Code CLI, g++/GDB, C++20 및 `bits/stdc++.h`
-컴파일, C/C++·CPH 확장, 설정과 풀이 루트 디렉터리를 진단합니다. Windows에서는
+`ct doctor`와 `ct setup`은 설정의 기본 언어를 사용합니다. `-l`/`--language`로 해당
+실행에만 언어를 지정할 수 있으며 설정을 다시 쓰지 않습니다. 선택 언어를 출력하고
+OS/아키텍처, VS Code CLI, CPH, 설정·루트·프로필은 공통으로 확인합니다. Windows에서는
 기존 PATH 및 환경변수 기반 VS Code 탐색을 그대로 사용하며, 설정된 `editor`를
 확인합니다. 설정을 읽을 수 없으면 기본 `code`를 탐색합니다.
 
@@ -211,7 +234,18 @@ Programmers는 `solution()` 골격만 제공합니다. Programmers의 반환형�
 모두 통과하면 0을 반환합니다. 누락된 도구 때문에 실행할 수 없는 후속 검사는
 `[SKIP]`으로 표시하고 실패 수에 중복 집계하지 않습니다. g++/GDB의 버전 문자열은
 참고 정보이며 조회 실패나 최신 버전 여부는 성공 판정에 영향을 주지 않습니다.
-C++ 중심 환경 진단이므로 기본 언어가 Python이어도 같은 검사를 수행합니다.
+
+| 선택 언어 | 필수 도구·검사 | 언어 확장 |
+| --- | --- | --- |
+| C++ | g++, GDB, C++20 및 `bits/stdc++.h` 컴파일 | `ms-vscode.cpptools` |
+| Python | 실행 가능한 Python 3의 경로·버전 (`python3`, `python`, `py -3` 순서) | `ms-python.python` |
+| Java | java·javac 버전 17+, `javac --release 17` 임시 컴파일 | `redhat.java` |
+| Rust | rustc 버전·`--edition=2021` 임시 컴파일 | `rust-lang.rust-analyzer` |
+
+Java는 JRE만으로 통과하지 않습니다. Rust는 Cargo를 요구하지 않으며 rustup의 자동
+도구체인 다운로드를 비활성화한 상태로 검사합니다. 다른 언어를 진단할 때 C++ 도구는
+필수 검사항목으로 실행하지 않습니다. 설정을 읽을 수 없으면 기본 C++로 진단하며
+설정 오류를 함께 보고합니다.
 
 설정이 없으면 실패를 보고하며 최초 설정을 시작하지 않습니다. `CT_CONFIG_DIR`를
 존중하고 설정·풀이 루트를 생성하거나 수정하지 않습니다. 컴파일 검사는 OS 임시
@@ -233,7 +267,7 @@ dry-run이 우선합니다. 계획을 만들 수 있으면 dry-run은 미지원 
 설정이 없거나 잘못되었다면 `ct config`로 먼저 해결해야 합니다. setup은 설정이나
 풀이 디렉터리를 생성·변경하지 않습니다.
 
-- Windows amd64: 환경변수 `MSYS2_ROOT`/`MSYSTEM_PREFIX`, 실행 파일과 PATH,
+- C++ / Windows amd64: 환경변수 `MSYS2_ROOT`/`MSYSTEM_PREFIX`, 실행 파일과 PATH,
   시스템 드라이브의 일반 설치 위치, 사용자 설치 위치 및 MSYS2 제거 등록 정보를
   이용해 기존 설치를 찾습니다. 사용할 수 있는 설치가 없을 때만 `winget`의
   `MSYS2.MSYS2`를 `%LOCALAPPDATA%\Programs\ct-msys2`에 사용자 범위로 설치합니다.
@@ -249,16 +283,26 @@ dry-run이 우선합니다. 계획을 만들 수 있으면 dry-run은 미지원 
   새 항목에는 따옴표를 넣지 않습니다. 쓰기 직전에 User PATH를 다시 읽습니다.
   현재 ct 프로세스에도 추가하여 마지막 doctor 검사에 사용합니다. 다른 터미널은
   재시작해야 반영됩니다. Machine PATH나 PowerShell 실행 정책은 변경하지 않습니다.
-- Linux Debian/Ubuntu 계열: 필요한 `build-essential`, `gdb`를 apt-get으로 설치합니다.
+- C++ / Linux Debian/Ubuntu 계열: 필요한 `build-essential`, `gdb`를 apt-get으로 설치합니다.
   패키지 목록 갱신과 설치 명령을 모두 계획에 표시하며, root가 아니면 승인 후에만
   sudo를 실행합니다. 인증 질문은 별도로 나타날 수 있습니다. 다른 배포판에서는
   자동 컴파일러 설치를 시도하지 않습니다.
+- Java: Windows는 [Microsoft OpenJDK 21](https://learn.microsoft.com/en-us/windows/dev-environment/java)의
+  `Microsoft.OpenJDK.21` winget 패키지를 계획에 표시하고 승인 후 설치합니다. 공급자
+  설치 프로그램이 권한 상승과 환경 등록을 수행할 수 있으며, ct는 최종 검사를 위해
+  현재 프로세스 PATH만 새로 읽습니다. ct가 JAVA_HOME을 직접 수정하지 않습니다.
+  Debian/Ubuntu는 `openjdk-21-jdk`를 apt로 설치합니다. 저장소에 패키지가 없으면 오류를
+  보고하며 저장소를 임의로 추가하지 않습니다. 다른 JDK가 PATH에서 우선하면 사용자가
+  JDK 선택을 바로잡아야 합니다.
+- Rust: rust-analyzer 확장은 자동 설치할 수 있지만, 도구체인은 [공식 rustup 안내](https://rustup.rs/)에
+  따라 수동 설치합니다. OS별 링커 준비도 사용자가 수행합니다.
+- Python: Python 확장은 자동 설치할 수 있지만 인터프리터 자체는 설치하지 않습니다.
 - VS Code 확장: 설정된 프로필에는 `code --profile <profile> --install-extension <id>`,
-  Default에는 `code --install-extension <id>`를 사용합니다. 대상은 C/C++와 CPH이며
+  Default에는 `code --install-extension <id>`를 사용합니다. 대상은 선택한 언어의 확장과 CPH이며
   기존 VS Code 탐색·Windows 인자 처리를 재사용합니다. `--force`는 사용하지 않습니다.
 
 작업이 실패하면 그 작업에 의존하는 후속 작업은 건너뛰고, 독립적인 작업은 계속합니다.
-작업 후 doctor를 다시 실행하여 같은 프로필의 확장, C++20 및 `bits/stdc++.h`까지
+작업 후 doctor를 다시 실행하여 같은 프로필의 확장과 선택 언어의 컴파일/실행 능력까지
 검증합니다. 환경이 준비되지 않았거나 작업이 실패하면 0이 아닌 종료 코드를 반환합니다.
 doctor는 계속 읽기 전용 진단이며 설치나 PATH 수정을 수행하지 않습니다.
 
@@ -313,3 +357,7 @@ PowerShell 스크립트 테스트는 `scripts/test-distribution.ps1`, Linux 테�
 `bash scripts/test-distribution.sh`입니다. 테스트는 임시 디렉터리, 모의 다운로드,
 모의 User PATH를 사용하며 실제 사용자 설정이나 풀이 디렉터리를 변경하지 않습니다.
 스크립트 테스트에는 테스트용 실행 파일을 빌드하기 위한 Go가 필요합니다.
+
+`CT_TEMPLATE_SMOKE=1 go test ./internal/template -v`는 이미 설치된 javac/rustc로
+Java 17·Rust 2021 템플릿을 컴파일합니다(PowerShell은 환경변수를 먼저 설정).
+일반 CI는 이 선택적 검사를 요구하지 않으며 도구체인을 설치하지 않습니다.

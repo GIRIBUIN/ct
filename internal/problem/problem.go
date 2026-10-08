@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	lang "github.com/GIRIBUIN/ct/internal/language"
 )
 
 func NormalizePlatform(value string) (string, error) {
@@ -18,14 +20,8 @@ func NormalizePlatform(value string) (string, error) {
 }
 
 func NormalizeLanguage(value string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "cpp", "c++":
-		return "cpp", nil
-	case "py", "python":
-		return "python", nil
-	default:
-		return "", fmt.Errorf("unsupported language %q (use cpp or python)", value)
-	}
+	definition, err := lang.Lookup(value)
+	return definition.Name, err
 }
 
 // Target validates the ID before using it as a directory name.
@@ -38,19 +34,18 @@ func Target(root, platform, language, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	definition, _ := lang.Lookup(language)
 	var name string
 	switch platform {
 	case "codeforces":
-		name, err = codeforcesFilename(id)
+		err = validateCodeforcesID(id)
+		name = definition.CodeforcesFile
 	case "programmers":
-		name, err = programmersFilename(id)
+		err = validateProgrammersID(id)
+		name = definition.ProgrammersFile
 	}
 	if err != nil {
 		return "", err
 	}
-	extension := ".cpp"
-	if language == "python" {
-		extension = ".py"
-	}
-	return filepath.Join(root, platform, id, name+extension), nil
+	return filepath.Join(root, platform, id, name), nil
 }

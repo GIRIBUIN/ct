@@ -9,6 +9,7 @@ import (
 
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/environment"
+	"github.com/GIRIBUIN/ct/internal/language"
 )
 
 func checksWithFailures(names ...string) []environment.Check {
@@ -52,7 +53,7 @@ func TestReadyPlansNothing(t *testing.T) {
 }
 
 func TestOnlyMissingExtensionPlannedAndProfileUsed(t *testing.T) {
-	for _, extension := range environment.RequiredExtensions {
+	for _, extension := range language.Extensions("cpp") {
 		for _, profile := range []string{"", "my coding profile"} {
 			t.Run(extension.Name+profile, func(t *testing.T) {
 				h := fakeHost(t)
