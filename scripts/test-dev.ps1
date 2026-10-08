@@ -1,5 +1,8 @@
 param([string]$Fixture = '')
 $ErrorActionPreference = 'Stop'
+$utf8NoBom = New-Object Text.UTF8Encoding($false)
+# Keep Windows PowerShell 5.1 as the CI target; the test host may also be pwsh.
+$testPowerShell = (Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Source
 
 $tokens = $null; $parseErrors = $null
 $null = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'dev.ps1'), [ref]$tokens, [ref]$parseErrors)
@@ -28,9 +31,14 @@ try {
     }
     # Child sessions use the real ct binary, but rebuilding is replaced by a
     # fixture copy. The fake editor prevents launching the developer's VS Code.
-    [IO.File]::WriteAllText((Join-Path $testRoot 'code.cmd'), "@echo off`r`nexit /b 0`r`n")
+    [IO.File]::WriteAllText((Join-Path $testRoot 'code.cmd'), "@echo off`r`nexit /b 0`r`n", $utf8NoBom)
     $driver = @'
 $ErrorActionPreference = 'Stop'
+if ($args.Count -eq 1 -and $args[0] -eq '__input-probe') {
+    Add-Type -Path (Join-Path $PSScriptRoot 'console.cs')
+    [CtDevConsole]::CaptureFirstInputLine((Join-Path $PSScriptRoot 'first-input.bin'))
+    exit 0
+}
 $global:ctDevTestFixture = '__FIXTURE__'
 function go {
     if ($args.Count -ne 4 -or $args[0] -ne 'build' -or $args[1] -ne '-o') { throw 'Unexpected build invocation.' }
@@ -52,31 +60,30 @@ exit $ctExit
 '@
     $driver = $driver.Replace('__FIXTURE__', ([IO.Path]::GetFullPath($Fixture)).Replace("'", "''"))
     $driverPath = Join-Path $testRoot 'driver.ps1'
-    [IO.File]::WriteAllText($driverPath, $driver)
+    [IO.File]::WriteAllText($driverPath, $driver, $utf8NoBom)
 
     function Invoke-DevTest([string[]]$CtArgs, [string]$InputText = '', [switch]$ExistingOverride, [switch]$Console, [int]$ExpectedExit = 0) {
         if ($Console) {
             # Keyboard events reach an actual console input buffer, not a pipe.
             # This catches the console-only EOF leak missed by redirected tests.
             $consoleDriver = Join-Path $testRoot 'console-driver.ps1'
-            $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($InputText))
+            $encoded = [Convert]::ToBase64String($utf8NoBom.GetBytes($InputText))
             $prefix = "Add-Type -Path (Join-Path `$PSScriptRoot 'console.cs')`r`n" +
-                "[CtDevConsole]::QueueInput([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$encoded')))`r`n"
+                "[CtDevConsole]::QueueInput((New-Object Text.UTF8Encoding(`$false)).GetString([Convert]::FromBase64String('$encoded')))`r`n"
             if ($ExistingOverride) {
                 $prefix += "`$env:CT_CONFIG_DIR = Join-Path `$PSScriptRoot 'original-config'`r`n"
             } else {
                 $prefix += "[Environment]::SetEnvironmentVariable('CT_CONFIG_DIR', `$null, 'Process')`r`n"
             }
-            [IO.File]::WriteAllText($consoleDriver, $prefix + $driver)
-            $powershell = (Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Source
+            [IO.File]::WriteAllText($consoleDriver, $prefix + $driver, $utf8NoBom)
             $allArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $consoleDriver) + $CtArgs
             $arguments = ($allArgs | ForEach-Object { '"' + $_ + '"' }) -join ' '
-            $code = [CtDevConsole]::RunHidden($powershell, $arguments, $testRoot)
+            $code = [CtDevConsole]::RunHidden($testPowerShell, $arguments, $testRoot)
             Assert-Dev ($code -eq $ExpectedExit) "Console development command failed: $CtArgs (exit $code)"
             return
         }
         $start = New-Object Diagnostics.ProcessStartInfo
-        $start.FileName = (Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Source
+        $start.FileName = $testPowerShell
         $allArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $driverPath) + $CtArgs
         $start.Arguments = ($allArgs | ForEach-Object { '"' + $_ + '"' }) -join ' '
         $start.UseShellExecute = $false
@@ -92,7 +99,7 @@ exit $ctExit
         $process = New-Object Diagnostics.Process
         $process.StartInfo = $start
         try {
-            $null = $process.Start()
+            [CtDevConsole]::StartWithUtf8Input($process)
             $stdout = $process.StandardOutput.ReadToEndAsync()
             $stderr = $process.StandardError.ReadToEndAsync()
             $process.StandardInput.Write($InputText)
@@ -103,6 +110,18 @@ exit $ctExit
             return $output
         } finally { $process.Dispose() }
     }
+
+    # Reproduce the CI host's BOM-emitting UTF-8 default deliberately. The
+    # receiver must see exactly kotlin, with no BOM silently stripped by a reader.
+    $previousInputEncoding = [Console]::InputEncoding
+    try {
+        [Console]::InputEncoding = New-Object Text.UTF8Encoding($true)
+        $null = Invoke-DevTest -CtArgs @('__input-probe') -InputText "kotlin`n"
+        $firstInput = $utf8NoBom.GetString([IO.File]::ReadAllBytes((Join-Path $testRoot 'first-input.bin')))
+        Assert-Dev (-not $firstInput.StartsWith([string][char]0xFEFF, [StringComparison]::Ordinal)) 'First input contains a UTF-8 BOM.'
+        Assert-Dev ([string]::Equals($firstInput, 'kotlin', [StringComparison]::Ordinal)) "First input must be exactly kotlin, got <$firstInput>."
+        Assert-Dev ([Console]::InputEncoding.GetPreamble().Length -eq 3) 'Test host input encoding was not restored.'
+    } finally { [Console]::InputEncoding = $previousInputEncoding }
 
     $devConfig = Join-Path $testRepo '.tmp-ct-config'
     $configFile = Join-Path $devConfig 'config.json'
@@ -197,7 +216,7 @@ exit $ctExit
     Assert-Dev (-not [IO.File]::Exists((Join-Path $devConfig 'registry.json'))) 'Reset retained the previous isolated registry.'
 
     $sentinel = Join-Path $testRepo 'preserved.txt'
-    [IO.File]::WriteAllText($sentinel, 'keep')
+    [IO.File]::WriteAllText($sentinel, 'keep', $utf8NoBom)
     $null = Invoke-DevTest -CtArgs @('--clean') -ExistingOverride
     Assert-Dev (-not (Test-Path -LiteralPath $devConfig) -and -not (Test-Path -LiteralPath $devRoot) -and -not (Test-Path -LiteralPath $devExe)) 'Clean left development artifacts.'
     Assert-Dev ([IO.File]::ReadAllText($sentinel) -ceq 'keep') 'Clean touched an unrelated file.'

@@ -9,6 +9,44 @@ using System.Text;
 
 public static class CtDevConsole
 {
+    public static void StartWithUtf8Input(Process process)
+    {
+        // .NET Framework (Windows PowerShell 5.1) has no StandardInputEncoding
+        // property: Process.Start snapshots Console.InputEncoding instead.
+        // Limit that fallback to stream creation and always restore the host.
+        Encoding noBom = new UTF8Encoding(false);
+        var property = typeof(ProcessStartInfo).GetProperty("StandardInputEncoding");
+        if (property != null)
+        {
+            property.SetValue(process.StartInfo, noBom, null);
+            process.Start();
+            return;
+        }
+        Encoding previous = Console.InputEncoding;
+        try
+        {
+            Console.InputEncoding = noBom;
+            process.Start();
+            // Assert the selected writer rather than relying on runtime defaults.
+            if (process.StandardInput.Encoding.GetPreamble().Length != 0)
+                throw new InvalidOperationException("Test stdin must use UTF-8 without BOM");
+        }
+        finally { Console.InputEncoding = previous; }
+    }
+
+    public static void CaptureFirstInputLine(string path)
+    {
+        // Capture bytes without StreamReader's automatic BOM detection/removal.
+        using (Stream input = Console.OpenStandardInput())
+        using (MemoryStream line = new MemoryStream())
+        {
+            int value;
+            while ((value = input.ReadByte()) != -1 && value != '\n')
+                line.WriteByte((byte)value);
+            File.WriteAllBytes(path, line.ToArray());
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct StartupInfo
     {
