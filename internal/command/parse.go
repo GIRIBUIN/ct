@@ -14,10 +14,29 @@ type options struct {
 	help     bool
 	doctor   bool
 	config   bool
+	setup    bool
+	yes      bool
+	dryRun   bool
 }
 
 // parse accepts options on either side of the problem ID.
 func parse(args []string) (options, error) {
+	if len(args) > 0 && args[0] == "setup" {
+		opts := options{setup: true}
+		for _, arg := range args[1:] {
+			switch arg {
+			case "--yes":
+				opts.yes = true
+			case "--dry-run":
+				opts.dryRun = true
+			case "-h", "--help":
+				opts.help = true
+			default:
+				return options{}, fmt.Errorf("unknown setup option %q (use --yes or --dry-run)", arg)
+			}
+		}
+		return opts, nil
+	}
 	if len(args) > 0 && (args[0] == "doctor" || args[0] == "config") {
 		opts := options{doctor: args[0] == "doctor", config: args[0] == "config"}
 		for _, arg := range args[1:] {

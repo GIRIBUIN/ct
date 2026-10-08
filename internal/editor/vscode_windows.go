@@ -12,9 +12,14 @@ import (
 )
 
 func extensionCommand(ctx context.Context, editor, profile string) *exec.Cmd {
+	return extensionOperation(ctx, editor, profile, "--list-extensions")
+}
+
+// args are fixed extension operations and validated IDs, never shell input.
+func extensionOperation(ctx context.Context, editor, profile string, args ...string) *exec.Cmd {
 	ext := filepath.Ext(editor)
 	if !strings.EqualFold(ext, ".cmd") && !strings.EqualFold(ext, ".bat") {
-		return exec.CommandContext(ctx, editor, append(profileArgs(profile), "--list-extensions")...)
+		return exec.CommandContext(ctx, editor, append(profileArgs(profile), args...)...)
 	}
 	profileArgument := ""
 	if profile != "" {
@@ -22,7 +27,7 @@ func extensionCommand(ctx context.Context, editor, profile string) *exec.Cmd {
 	}
 	cmd := exec.CommandContext(ctx, "cmd.exe")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CmdLine: `cmd.exe /d /v:off /s /c ""%CT_EDITOR_PATH%"` + profileArgument + ` --list-extensions"`,
+		CmdLine: `cmd.exe /d /v:off /s /c ""%CT_EDITOR_PATH%"` + profileArgument + " " + strings.Join(args, " ") + `"`,
 	}
 	cmd.Env = append(os.Environ(), "CT_EDITOR_PATH="+editor, "CT_EDITOR_PROFILE="+profile)
 	// Bound waiting for inherited pipes if a batch-file child outlives cmd.exe.

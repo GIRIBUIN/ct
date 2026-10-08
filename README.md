@@ -12,6 +12,9 @@ ct 181188 --platform programmers
 ct 181188 -p pg -l py
 ct config
 ct doctor
+ct setup
+ct setup --dry-run
+ct setup --yes
 ```
 
 빌드된 실행 파일을 PATH에 두면 `ct`로 실행할 수 있습니다. 현재 디렉터리에서
@@ -111,7 +114,51 @@ C++ 중심 환경 진단이므로 기본 언어가 Python이어도 같은 검사
 doctor에는 선택한 프로필 이름 또는 `default`가 표시됩니다. Windows 배치 호출에서
 안전하게 전달할 수 없는 큰따옴표·줄바꿈·NUL을 포함한 프로필 이름은 오류로 처리합니다.
 
-setup, 설치 도구, 릴리스·업데이트 및 제출 자동화는 지원하지 않습니다.
+`ct setup`은 doctor의 검사 결과를 재사용하여 누락된 구성 요소와 실행할 계획을
+먼저 표시합니다. `Continue? [Y/n]`에서 승인한 뒤에만 설치나 PATH 변경을 수행합니다.
+`--yes`는 표시된 종류의 작업을 사전 승인하며 확인 질문을 생략합니다.
+`--dry-run`은 질문이나 설치 없이 계획만 출력합니다. 두 옵션을 함께 사용해도
+dry-run이 우선합니다. 계획을 만들 수 있으면 dry-run은 미지원 항목이 있어도 0으로
+종료합니다. 환경이 이미 준비되어 있으면 설치할 것이 없음을 알리고 종료합니다.
+
+설치 대상은 doctor가 누락으로 보고한 항목뿐이며, 정상 도구나 확장을 다시
+설치하지 않습니다. 확장 조회 자체가 실패하면 설치 여부를 추측하지 않습니다.
+설정이 없거나 잘못되었다면 `ct config`로 먼저 해결해야 합니다. setup은 설정이나
+풀이 디렉터리를 생성·변경하지 않습니다.
+
+- Windows amd64: 환경변수 `MSYS2_ROOT`/`MSYSTEM_PREFIX`, 실행 파일과 PATH,
+  시스템 드라이브의 일반 설치 위치, 사용자 설치 위치 및 MSYS2 제거 등록 정보를
+  이용해 기존 설치를 찾습니다. 사용할 수 있는 설치가 없을 때만 `winget`의
+  `MSYS2.MSYS2`를 `%LOCALAPPDATA%\Programs\ct-msys2`에 사용자 범위로 설치합니다.
+  winget 소스·패키지 약관 수락도 계획에 표시합니다. 등록된 설치가 손상되었으면
+  두 번째 설치를 만들지 않고 수동 복구를 안내합니다.
+- Windows 패키지: 기존 MSYS2의 `pacman -S --needed --noconfirm`으로 필요한
+  `mingw-w64-ucrt-x86_64-gcc` 및 `mingw-w64-ucrt-x86_64-gdb`와 의존성을 설치합니다.
+  실행 파일이 이미 UCRT64 bin에 있고 PATH에서만 누락되었다면 재설치하지 않습니다.
+  전체 MSYS2 업그레이드는 수행하지 않으므로 패키지 DB가 오래된 경우
+  [MSYS2 공식 안내](https://www.msys2.org/docs/package-management/)에 따라 수동 업데이트해야 합니다.
+- Windows PATH: 필요한 UCRT64 bin 추가를 계획에 명시하고 **User PATH만** 수정합니다.
+  기존 문자열을 보존하고 대소문자·구분자·끝 슬래시를 정규화하여 중복을 피하며,
+  새 항목에는 따옴표를 넣지 않습니다. 쓰기 직전에 User PATH를 다시 읽습니다.
+  현재 ct 프로세스에도 추가하여 마지막 doctor 검사에 사용합니다. 다른 터미널은
+  재시작해야 반영됩니다. Machine PATH나 PowerShell 실행 정책은 변경하지 않습니다.
+- Linux Debian/Ubuntu 계열: 필요한 `build-essential`, `gdb`를 apt-get으로 설치합니다.
+  패키지 목록 갱신과 설치 명령을 모두 계획에 표시하며, root가 아니면 승인 후에만
+  sudo를 실행합니다. 인증 질문은 별도로 나타날 수 있습니다. 다른 배포판에서는
+  자동 컴파일러 설치를 시도하지 않습니다.
+- VS Code 확장: 설정된 프로필에는 `code --profile <profile> --install-extension <id>`,
+  Default에는 `code --install-extension <id>`를 사용합니다. 대상은 C/C++와 CPH이며
+  기존 VS Code 탐색·Windows 인자 처리를 재사용합니다. `--force`는 사용하지 않습니다.
+
+작업이 실패하면 그 작업에 의존하는 후속 작업은 건너뛰고, 독립적인 작업은 계속합니다.
+작업 후 doctor를 다시 실행하여 같은 프로필의 확장, C++20 및 `bits/stdc++.h`까지
+검증합니다. 환경이 준비되지 않았거나 작업이 실패하면 0이 아닌 종료 코드를 반환합니다.
+doctor는 계속 읽기 전용 진단이며 설치나 PATH 수정을 수행하지 않습니다.
+
+VS Code 자체 설치, Python 관리, 기존 비호환 컴파일러 교체, 릴리스·자체 업데이트 및
+제출 자동화는 지원하지 않습니다. MSYS2의 임의 비등록 설치는 `MSYS2_ROOT`로 알려줄 수
+있습니다. 자동 설치 경로에 공백이 있거나 필요한 패키지 관리자가 없으면 수동 설치를
+안내합니다. 실제 설치에는 네트워크와 각 설치 도구의 권한이 필요합니다.
 
 검증:
 

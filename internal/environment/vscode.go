@@ -2,6 +2,11 @@ package environment
 
 import "strings"
 
+var RequiredExtensions = []struct{ Name, ID string }{
+	{"C/C++", "ms-vscode.cpptools"},
+	{"CPH", "divyanshuagrawal.competitive-programming-helper"},
+}
+
 func (c checker) checkExtensions(code, profile string, lookupErr error) []Check {
 	var results []Check
 	installed := make(map[string]bool)
@@ -17,15 +22,12 @@ func (c checker) checkExtensions(code, profile string, lookupErr error) []Check 
 			}
 		}
 	}
-	for _, extension := range []struct{ name, id string }{
-		{"C/C++", "ms-vscode.cpptools"},
-		{"CPH", "divyanshuagrawal.competitive-programming-helper"},
-	} {
-		result := Check{"VS Code Extensions", extension.name, OK, extension.id}
+	for _, extension := range RequiredExtensions {
+		result := Check{"VS Code Extensions", extension.Name, OK, extension.ID}
 		if queryFailed {
-			result.Status, result.Detail = Skip, extension.id+" (extension list unavailable)"
-		} else if !installed[extension.id] {
-			result.Status, result.Detail = Fail, extension.id+" (not installed)"
+			result.Status, result.Detail = Skip, extension.ID+" (extension list unavailable)"
+		} else if !installed[extension.ID] {
+			result.Status, result.Detail = Fail, extension.ID+" (not installed)"
 		}
 		results = append(results, result)
 	}

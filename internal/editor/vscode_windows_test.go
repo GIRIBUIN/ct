@@ -167,3 +167,28 @@ func TestWindowsUnsafeProfileRejected(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowsExtensionInstallationArguments(t *testing.T) {
+	cli := filepath.Join(t.TempDir(), "fake code & cli.cmd")
+	data := "@echo off\r\nif defined CT_CONFIG_DIR exit /b 9\r\n:args\r\nif \"%~1\"==\"\" exit /b 0\r\necho %1\r\nshift\r\ngoto args\r\n"
+	if err := os.WriteFile(cli, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CT_CONFIG_DIR", "test-config")
+	for _, profile := range []string{"", "coding & %PATH% !profile! (x)"} {
+		t.Run(profile, func(t *testing.T) {
+			cmd, err := InstallExtensionCommand(context.Background(), cli, profile, "ms-vscode.cpptools")
+			if err != nil {
+				t.Fatal(err)
+			}
+			output, err := cmd.CombinedOutput()
+			want := "--install-extension\nms-vscode.cpptools\n"
+			if profile != "" {
+				want = "--profile\n\"" + profile + "\"\n" + want
+			}
+			if err != nil || strings.ReplaceAll(string(output), "\r\n", "\n") != want {
+				t.Fatalf("extension install = %q, %v; want %q", output, err, want)
+			}
+		})
+	}
+}

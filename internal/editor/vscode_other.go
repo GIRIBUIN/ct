@@ -8,7 +8,11 @@ import (
 )
 
 func extensionCommand(ctx context.Context, editor, profile string) *exec.Cmd {
-	return exec.CommandContext(ctx, editor, append(profileArgs(profile), "--list-extensions")...)
+	return extensionOperation(ctx, editor, profile, "--list-extensions")
+}
+
+func extensionOperation(ctx context.Context, editor, profile string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, editor, append(profileArgs(profile), args...)...)
 }
 
 func findEditor(editor string) (string, error) {

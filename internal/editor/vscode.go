@@ -4,10 +4,26 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 )
+
+// InstallExtensionCommand shares profile handling and Windows batch quoting with
+// extension queries. The caller controls execution after setup approval.
+func InstallExtensionCommand(ctx context.Context, path, profile, id string) (*exec.Cmd, error) {
+	if err := validateProfile(profile); err != nil {
+		return nil, err
+	}
+	// IDs are passed to cmd.exe on Windows; only Marketplace identifier syntax is allowed.
+	if id == "" || strings.ContainsAny(id, "\"\r\n\x00 &|<>%!^") {
+		return nil, fmt.Errorf("invalid extension ID %q", id)
+	}
+	cmd := extensionOperation(ctx, path, profile, "--install-extension", id)
+	cmd.Env = editorEnvironment(cmd.Environ())
+	return cmd, nil
+}
 
 // EnsureProfile lets VS Code select (or create) a named profile through its CLI.
 func EnsureProfile(name, profile string) error {

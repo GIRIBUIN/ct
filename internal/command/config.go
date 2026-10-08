@@ -14,10 +14,12 @@ import (
 const usage = `Usage: ct <problem> [-p <platform>] [-l <language>]
        ct doctor
        ct config
+       ct setup [--yes] [--dry-run]
 
 Commands:
   doctor  Diagnose tools, C++ capabilities, extensions and configuration (read-only)
   config  Configure coding-test root, defaults and VS Code profile interactively
+  setup   Plan and install missing components after approval (--dry-run previews only)
 
 Platforms: codeforces (cf), programmers (pg)
 Languages: cpp (c++), python (py)
@@ -40,6 +42,9 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 	}
 	if opts.doctor {
 		return doctor(output)
+	}
+	if opts.setup {
+		return setup(opts, input, output)
 	}
 	path, err := config.Path()
 	if err != nil {
