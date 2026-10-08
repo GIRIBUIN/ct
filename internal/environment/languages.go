@@ -13,7 +13,10 @@ func (c checker) languageChecks(selected string) []Check {
 	checks := map[string]func() []Check{
 		"cpp": c.cppChecks, "python": c.pythonChecks, "java": c.javaChecks, "rust": c.rustChecks,
 	}
-	return checks[selected]()
+	if check, ok := checks[selected]; ok {
+		return check()
+	}
+	return []Check{{"Environment", "provider", Skip, "no built-in environment provider; workspace generation is supported, language diagnostics are unavailable"}}
 }
 
 func (c checker) cppChecks() []Check {

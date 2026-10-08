@@ -120,14 +120,36 @@ try {
     Assert-Equal ([IO.File]::ReadAllText((Join-Path $canonical 'config.json'))) 'existing preserved'
     Assert-Equal ([IO.File]::ReadAllText((Join-Path $env:CT_CONFIG_DIR 'config.json'))) 'override preserved'
     [IO.File]::WriteAllText((Join-Path $canonical 'config.json'), '{}')
+    [IO.File]::WriteAllText((Join-Path $canonical 'registry.json'), '{"version":1}')
+    $templateOwner = Join-Path $canonical 'templates\languages\kotlin'
+    $platformOwner = Join-Path $canonical 'templates\platforms\baekjoon'
+    $null = [IO.Directory]::CreateDirectory($templateOwner)
+    $null = [IO.Directory]::CreateDirectory($platformOwner)
+    [IO.File]::WriteAllText((Join-Path $templateOwner 'codeforces.tmpl'), 'template')
+    [IO.File]::WriteAllText((Join-Path $platformOwner 'kotlin.tmpl'), 'template')
+    [IO.File]::WriteAllText((Join-Path $templateOwner 'notes.txt'), 'preserve unknown file')
+    [IO.File]::WriteAllText((Join-Path $env:CT_CONFIG_DIR 'registry.json'), 'override preserved')
     [IO.File]::WriteAllText((Join-Path $canonical 'main.cpp'), 'keep canonical sibling')
     [IO.File]::WriteAllText((Join-Path $env:CT_CONFIG_DIR 'main.cpp'), 'keep solutions')
     Uninstall-Ct
     Assert-Equal (Test-Path -LiteralPath $installed) $false
     Assert-Equal $script:fakeUserPath 'C:\existing;C:\Other Tool;'
     Assert-Equal (Test-Path -LiteralPath (Join-Path $canonical 'config.json')) $true
+    Assert-Equal (Test-Path -LiteralPath (Join-Path $canonical 'registry.json')) $true
+    Assert-Equal (Test-Path -LiteralPath (Join-Path $templateOwner 'codeforces.tmpl')) $true
     Uninstall-Ct -RemoveConfig
     Assert-Equal (Test-Path -LiteralPath (Join-Path $canonical 'config.json')) $false
+    Assert-Equal (Test-Path -LiteralPath (Join-Path $canonical 'registry.json')) $false
+    Assert-Equal (Test-Path -LiteralPath (Join-Path $templateOwner 'codeforces.tmpl')) $false
+    Assert-Equal (Test-Path -LiteralPath $platformOwner) $false
+    Assert-Equal ([IO.File]::ReadAllText((Join-Path $templateOwner 'notes.txt'))) 'preserve unknown file'
+    Assert-Equal ([IO.File]::ReadAllText((Join-Path $env:CT_CONFIG_DIR 'registry.json'))) 'override preserved'
+    $linkedOwner = Join-Path $canonical 'templates\languages\linked'
+    $null = New-Item -ItemType Junction -Path $linkedOwner -Target $env:CT_CONFIG_DIR
+    [IO.File]::WriteAllText((Join-Path $env:CT_CONFIG_DIR 'codeforces.tmpl'), 'keep linked template')
+    Assert-Throws { Remove-CtTemplates $canonical }
+    Assert-Equal ([IO.File]::ReadAllText((Join-Path $env:CT_CONFIG_DIR 'codeforces.tmpl'))) 'keep linked template'
+    [IO.Directory]::Delete($linkedOwner, $false)
     Assert-Equal ([IO.File]::ReadAllText((Join-Path $canonical 'main.cpp'))) 'keep canonical sibling'
     Assert-Equal ([IO.File]::ReadAllText((Join-Path $env:CT_CONFIG_DIR 'main.cpp'))) 'keep solutions'
     # Exercise the README invocation forms with only the original entry guards and stubs.
@@ -138,6 +160,7 @@ try {
     Assert-Equal ($installAst.EndBlock.Statements[-1].Extent.Text | Invoke-Expression) 'install entry'
     $purgeEntry = $uninstallAst.ParamBlock.Extent.Text + "`n" + $uninstallAst.EndBlock.Statements[-1].Extent.Text
     Assert-Equal (& ([scriptblock]::Create($purgeEntry)) -Purge) 'purge=True'
+    & (Join-Path $ScriptsDir 'test-dev.ps1') -Fixture $fixture
     Write-Host 'Windows distribution tests passed (temporary files, mocked downloads and User PATH).'
 } finally {
     foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }

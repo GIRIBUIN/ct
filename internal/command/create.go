@@ -14,6 +14,10 @@ func create(target, platform, language string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	return createData(target, data)
+}
+
+func createData(target string, data []byte) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		return false, fmt.Errorf("create problem directory: %w", err)
 	}

@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/editor"
-	"github.com/GIRIBUIN/ct/internal/language"
+	"github.com/GIRIBUIN/ct/internal/registry"
 )
 
 type Check struct {
@@ -62,16 +63,33 @@ func Diagnose(selected ...string) []Check {
 func (c checker) check(override ...string) []Check {
 	configuration, editorName, profile := c.configuration()
 	results := []Check{{"System", "OS", OK, runtime.GOOS + "/" + runtime.GOARCH}}
+	r := registry.Builtins()
+	var registryErr error
+	if path, err := c.configPath(); err == nil {
+		r, registryErr = registry.Load(filepath.Dir(path))
+		if registryErr != nil {
+			r = registry.Builtins()
+			results = append(results, Check{"Configuration", "registry", Fail, registryErr.Error()})
+		}
+	}
 	selected := "cpp"
 	for _, check := range configuration {
 		if check.Name == "language" && check.Status == OK {
 			selected = check.Detail
 		}
 	}
+	for i := range configuration {
+		check := &configuration[i]
+		if check.Status == OK && (check.Name == "language" || check.Name == "platform") {
+			if _, err := r.Normalize(check.Name, check.Detail); err != nil {
+				check.Status, check.Detail = Fail, err.Error()
+			}
+		}
+	}
 	if len(override) > 0 && override[0] != "" {
 		selected = override[0]
 	}
-	definition, languageErr := language.Lookup(selected)
+	definition, languageErr := r.Lookup("language", selected, true)
 	if languageErr != nil {
 		results = append(results, Check{"Language", "selected", Fail, languageErr.Error()})
 	} else {
@@ -84,7 +102,7 @@ func (c checker) check(override ...string) []Check {
 	} else {
 		results = append(results, Check{"Tools", "code CLI", OK, code})
 	}
-	if languageErr == nil {
+	if languageErr == nil && registryErr == nil {
 		results = append(results, c.languageChecks(selected)...)
 	}
 	results = append(results, c.checkExtensions(code, profile, codeErr, selected)...)

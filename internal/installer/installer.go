@@ -118,6 +118,10 @@ func (h host) plan(checks []environment.Check) (Plan, error) {
 		selected = "cpp"
 	}
 	if _, err := language.Lookup(selected); err != nil {
+		if lookupCheck(checks, "provider").Status == environment.Skip && lookupCheck(checks, "provider").Detail != "" {
+			plan.Notes = append(plan.Notes, fmt.Sprintf("Automatic setup is not available for user language %q.", selected))
+			return plan, nil
+		}
 		return plan, err
 	}
 	if selected == "cpp" {

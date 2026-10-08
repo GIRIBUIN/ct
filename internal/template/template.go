@@ -5,10 +5,22 @@ import (
 	"fmt"
 
 	"github.com/GIRIBUIN/ct/internal/problem"
+	"github.com/GIRIBUIN/ct/internal/registry"
 )
 
 //go:embed templates/*/*.tmpl
 var files embed.FS
+
+func LoadWithRegistry(r *registry.Registry, platform, language string) ([]byte, error) {
+	b, err := r.Binding(platform, language)
+	if err != nil {
+		return nil, err
+	}
+	if b.Embedded {
+		return Load(b.Platform, b.Language)
+	}
+	return r.ReadTemplate(b)
+}
 
 func Load(platform, language string) ([]byte, error) {
 	platform, err := problem.NormalizePlatform(platform)

@@ -36,6 +36,36 @@ ct_remove_profile() {
     fi
 }
 
+# Only the fixed ct template layout is eligible. Unknown files and linked paths
+# are preserved; no registry value is interpreted as a deletion path.
+ct_remove_templates() {
+    local base=$1/templates kind owner file name
+    ct_remove_plain_path "$base" || return 1
+    [[ -d $base ]] || return 0
+    for kind in languages platforms; do
+        ct_remove_plain_path "$base/$kind" || return 1
+        [[ -d $base/$kind ]] || continue
+        for owner in "$base/$kind"/*; do
+            [[ -e $owner || -L $owner ]] || continue
+            name=${owner##*/}
+            [[ $name =~ ^[a-z][a-z0-9_-]*$ ]] || continue
+            ct_remove_plain_path "$owner" || return 1
+            [[ -d $owner ]] || continue
+            for file in "$owner"/*.tmpl; do
+                [[ -e $file || -L $file ]] || continue
+                name=${file##*/}
+                [[ $name =~ ^[a-z][a-z0-9_-]*\.tmpl$ ]] || continue
+                ct_remove_plain_path "$file" || return 1
+                [[ -f $file ]] || continue
+                rm -f -- "$file" || return 1
+            done
+            rmdir -- "$owner" 2>/dev/null || true
+        done
+        rmdir -- "$base/$kind" 2>/dev/null || true
+    done
+    rmdir -- "$base" 2>/dev/null || true
+}
+
 ct_uninstall() (
     set -euo pipefail
     local purge=false config target
@@ -52,17 +82,20 @@ ct_uninstall() (
     rm -f -- "$target"
     ct_remove_profile "$HOME/.profile"
     if $purge; then
-        if [[ -n ${CT_CONFIG_DIR:-} ]]; then echo 'CT_CONFIG_DIR is not a purge target; only canonical config.json is eligible.'; fi
+        if [[ -n ${CT_CONFIG_DIR:-} ]]; then echo 'CT_CONFIG_DIR is not a purge target; only canonical ct configuration/registry/templates are eligible.'; fi
         config=$(ct_canonical_config)
-        ct_remove_plain_path "$config/config.json"
-        [[ ! -e $config/config.json || -f $config/config.json ]] || { echo 'config.json is not a regular file; preserved.' >&2; exit 1; }
-        rm -f -- "$config/config.json"
+        for target in config.json registry.json; do
+            ct_remove_plain_path "$config/$target"
+            [[ ! -e $config/$target || -f $config/$target ]] || { echo "$target is not a regular file; preserved." >&2; exit 1; }
+        done
+        ct_remove_templates "$config"
+        rm -f -- "$config/config.json" "$config/registry.json"
         if [[ -d $config ]]; then
             rmdir -- "$config" 2>/dev/null || echo "Preserved nonempty configuration directory: $config"
         fi
     fi
     echo 'ct removed. Solution files and development tools were preserved.'
-    if ! $purge; then echo 'ct configuration was preserved (use --purge to remove canonical config.json).'; fi
+    if ! $purge; then echo 'ct configuration, registry and templates were preserved (use --purge to remove canonical ct data).'; fi
     echo 'Start a new shell, or run: hash -r. Other entries in ~/.local/bin are unchanged.'
 )
 

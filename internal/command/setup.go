@@ -22,6 +22,18 @@ func runSetup(opts options, input io.Reader, output io.Writer, diagnose func() [
 	fmt.Fprintln(output, "Checking environment...")
 	checks := diagnose()
 	for _, check := range checks {
+		if check.Section == "Environment" && check.Name == "provider" && check.Status == environment.Skip {
+			selected := opts.language
+			for _, result := range checks {
+				if result.Section == "Language" && result.Name == "selected" {
+					selected = result.Detail
+				}
+			}
+			fmt.Fprintf(output, "Automatic setup is not available for user language %q.\n", selected)
+			return nil
+		}
+	}
+	for _, check := range checks {
 		if check.Section == "Language" {
 			fmt.Fprintf(output, "Selected language: %s\n", check.Detail)
 		}

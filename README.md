@@ -99,11 +99,15 @@ Linux 제거는 `~/.local/bin/ct`와 설치 스크립트가 추가한 정확한 
 설치된 ct도 유지합니다. doctor가 문제를 보고해도 설치 실패로 처리하지 않고
 `ct setup --dry-run`으로 검토한 뒤 `ct setup`을 직접 실행하도록 안내합니다.
 
-기본 제거는 설정을 보존합니다. purge도 **기본 설정 위치의 `config.json`과 비어 있는
-ct 디렉터리만** 제거합니다. Windows는 `%APPDATA%\ct`, Linux는
+기본 제거는 설정·레지스트리·사용자 템플릿을 보존합니다. purge는 **기본 설정 위치의
+`config.json`, `registry.json`, ct 소유 템플릿과 비어 있는 디렉터리만** 제거합니다. Windows는 `%APPDATA%\ct`, Linux는
 `$XDG_CONFIG_HOME/ct` 또는 `~/.config/ct`입니다. `CT_CONFIG_DIR`는 purge 대상 선택에
 사용하지 않으며 별도 경로는 보존한다고 안내합니다. 기본 위치에 다른 파일이 있으면
 디렉터리를 보존합니다. 심볼릭 링크·Windows junction을 따라 삭제하지 않습니다.
+템플릿 삭제는 `templates/languages/<이름>/<플랫폼>.tmpl` 및
+`templates/platforms/<이름>/<언어>.tmpl` 형태의 일반 파일에 한정합니다.
+그 밖의 파일과 비어 있지 않은 디렉터리는 보존하며, 레지스트리 JSON의 임의 경로를
+삭제 대상으로 사용하지 않습니다.
 풀이 루트는 읽거나 삭제하지 않으며 VS Code, 확장, GCC, GDB, MSYS2도 제거하지 않습니다.
 
 체크섬은 전송 손상과 바이너리/목록 불일치를 검출합니다. 스크립트와 체크섬 자체는
@@ -182,6 +186,12 @@ Default는 이 확인 없이 사용할 수 있습니다. 확장은 설치하지 
 개발 스크립트는 `.tmp-ct-config`로 설정을 격리하고 `.tmp-coding-test`를 풀이 루트로
 사용합니다. OS 사용자 설정 환경변수는 변경하지 않으며, `CT_CONFIG_DIR`는 편집기에
 전달하지 않습니다.
+`scripts/dev.ps1`은 개발 설정이 없을 때 별도 프로세스로 `ct config`를 실행하고 그
+프로세스의 stdin에만 루트와 기본 응답을 전달합니다. 입력과 프로세스가 완전히 종료된
+뒤 요청한 명령은 현재 터미널 입력을 그대로 사용하므로
+`.\scripts\dev.ps1 language add`, `platform add`, `config` 및 삭제 확인 질문도
+대화형으로 사용할 수 있습니다. `--reset`은 격리된 개발 파일을 지운 뒤 다시 준비하고,
+`--clean`은 개발 설정·풀이·실행 파일만 정리합니다.
 Windows에서는 `%AppData%\ct\config.json`, Linux에서는
 `$XDG_CONFIG_HOME/ct/config.json` 또는 `$HOME/.config/ct/config.json`입니다.
 설정 파일을 포함하는 디렉터리는 풀이 루트로 선택할 수 없습니다.
@@ -210,7 +220,7 @@ CLI 옵션은 해당 실행에만 적용되고 저장된 기본값을 변경하�
 <root>/programmers/181188/solution.rs
 ```
 
-템플릿은 `go:embed`로 실행 파일에 포함됩니다. Codeforces는 `solve()` 기반이며,
+내장 템플릿은 `go:embed`로 실행 파일에 포함됩니다. Codeforces는 `solve()` 기반이며,
 Programmers는 `solution()` 골격만 제공합니다. Programmers의 반환형과 인자는
 문제에 맞게 직접 수정해야 합니다.
 Java는 Java 17 문법을 사용하며 Codeforces에는 BufferedReader/StringTokenizer와
@@ -310,6 +320,161 @@ VS Code 자체 설치, Python 관리, 기존 비호환 컴파일러 교체, CLI 
 제출 자동화는 지원하지 않습니다. MSYS2의 임의 비등록 설치는 `MSYS2_ROOT`로 알려줄 수
 있습니다. 자동 설치 경로에 공백이 있거나 필요한 패키지 관리자가 없으면 수동 설치를
 안내합니다. 실제 설치에는 네트워크와 각 설치 도구의 권한이 필요합니다.
+
+## Built-in languages
+
+내장 언어 정의와 템플릿은 실행 파일에 포함됩니다. `registry.json`이 없어도 기존
+동작을 그대로 사용할 수 있습니다.
+
+| 이름 | 별칭 | 확장자 | ENV |
+| --- | --- | --- | --- |
+| cpp | c++ | cpp | full |
+| python | py | py | detect |
+| java | — | java | full |
+| rust | rs | rs | partial |
+
+`full`은 언어 환경 진단과 지원 OS의 자동 설치, `detect`는 런타임 진단,
+`partial`은 일부 수동 준비가 필요한 환경 지원, `none`은 파일 생성만 지원함을
+뜻합니다. 기존 언어별 OS·설치 제한은 위의 doctor/setup 설명과 같습니다.
+
+```sh
+ct language list
+ct language show rs
+ct language disable python
+ct language enable py
+```
+
+목록에는 비활성 항목도 표시하며 `list --all`은 동일하게 동작합니다.
+내장 항목은 삭제할 수 없지만 비활성화·재활성화할 수 있습니다.
+
+## Built-in platforms
+
+내장 플랫폼은 `codeforces`(`cf`), `programmers`(`pg`)입니다.
+Codeforces 문제 ID 규칙과 Programmers 숫자 ID 규칙은 유지됩니다.
+
+```sh
+ct platform list
+ct platform show pg
+ct platform disable programmers
+ct platform enable pg
+```
+
+`show`에는 정규 이름, 별칭, 출처, 활성 상태, 언어별 파일명과 템플릿 위치를 표시합니다.
+언어의 `show`에는 확장자, 환경 지원 수준과 해당 내장 VS Code 확장도 표시합니다.
+
+## Custom languages
+
+```sh
+ct language add
+# Name: kotlin
+# Aliases: kt
+# File extension: kt
+```
+
+추가는 대화형입니다. 현재 활성 플랫폼마다 파일명을 묻습니다. Codeforces는
+`main.kt`, Programmers는 `solution.kt`가 기본값이며 `Main.kt`, `Solution.kt` 등으로
+변경할 수 있습니다. 각 조합의 템플릿 원본 파일 경로를 입력하면 내용을 복사하고,
+Enter를 누르면 빈 템플릿을 만듭니다. 완료 시 출력하는 경로를 편집기로 열어 수정하세요.
+빈 템플릿도 정상적으로 사용할 수 있으며, 원본 파일은 변경하거나 삭제하지 않습니다.
+
+이름·별칭은 소문자로 정규화합니다. 정규 이름에는 영문자로 시작하는 영문 소문자,
+숫자, `-`, `_`를 사용할 수 있고 별칭에는 `+`도 허용합니다. 빈 값, 중복, 내장·사용자
+항목과의 충돌, 경로 구분자 및 Windows 예약 이름은 거부합니다. 확장자는 점 없이
+영문자·숫자로 입력합니다. 파일명은 하위 경로가 아닌 단일 파일명이어야 합니다.
+
+```sh
+ct language show kt
+ct 71A -l kt
+ct language disable kotlin
+ct language enable kotlin
+ct language remove kotlin
+```
+
+사용자 언어는 로컬 파일 생성용이며 자동 컴파일러 설치 기능을 얻지 않습니다.
+`ct doctor -l kotlin`은 언어별 컴파일러 검사를 실행하지 않고 제공자 부재를 `[SKIP]`으로
+알립니다. VS Code CLI·CPH·설정·루트·프로필 공통 검사는 계속 수행합니다. 제공자 부재
+자체는 정보이며 종료 코드 실패 사유가 아닙니다. 공통 검사를 통과하면 언어 환경
+진단을 제공하지 않는다는 요약을 표시합니다. `ct setup -l kotlin`은 자동 setup이
+지원되지 않는다고 알리고 설치 작업 없이 종료합니다. 사용자 명령·셸 후크는 실행하지 않습니다.
+
+## Custom platforms
+
+```sh
+ct language add
+# kotlin / kt, 확장자 kt
+ct platform add
+# baekjoon / boj
+# kotlin 파일명은 Main.kt로 지정하고 원하는 템플릿 원본을 선택
+ct 1000 -p boj -l kt
+```
+
+플랫폼 추가 시 현재 활성 언어별 파일명·템플릿을 묻습니다. 일반 기본 파일명은 언어
+메타데이터에서 가져오며 C++ `main.cpp`, Python `main.py`, Java `Main.java`, Rust
+`main.rs`, 사용자 언어 `main.<확장자>`입니다. 위 예는
+`<root>/baekjoon/1000/Main.kt`를 만듭니다. 사용자 플랫폼 문제 ID에는 영문자·숫자로
+시작하는 영문자, 숫자, `-`, `_`를 허용합니다. 기존 파일은 덮어쓰지 않고 엽니다.
+
+ct는 심사 사이트의 언어 지원 여부를 제한하거나 추측하지 않습니다. 사용자 플랫폼은
+언어별 doctor/setup 검사에 별도 시스템 설치 동작을 추가하지 않습니다.
+
+```sh
+ct platform show boj
+ct platform disable baekjoon
+ct platform enable boj
+ct platform remove baekjoon
+```
+
+언어·플랫폼 모두 비활성 상태에서는 새 생성과 새 기본값 선택에 사용할 수 없습니다.
+저장된 기본값을 비활성화·삭제해도 설정을 자동으로 바꾸지 않습니다. 문제 생성 시
+`-p`/`-l`로 활성 항목을 지정하거나, 해당 항목을 재활성화하거나 `ct config`에서
+기본값을 바꾸세요. `ct config`는 유효하지 않은 현재 기본값을 안내하고 잘못된
+선택을 다시 묻습니다. `boj`, `kt` 같은 별칭은 정규 이름으로 저장합니다.
+
+사용자 항목 삭제는 제거할 레지스트리 항목과 ct 소유 템플릿의 범위를 보여준 뒤
+`Continue? [y/N]`으로 확인합니다. Enter/EOF는 취소입니다. 삭제·비활성화는
+**기존 풀이 파일, 컴파일러, VS Code 확장을 제거하지 않습니다.** 언어·플랫폼 조합에
+연결된 검증된 템플릿 파일과 빈 디렉터리만 삭제하며 임의 경로를 재귀 삭제하지 않습니다.
+
+### 레지스트리 저장과 조합
+
+레지스트리는 `config.json`과 같은 디렉터리의 `registry.json`에 저장합니다.
+Windows `%APPDATA%\ct`, Linux `${XDG_CONFIG_HOME:-$HOME/.config}/ct`가 기본이며,
+비어 있지 않은 `CT_CONFIG_DIR`가 우선합니다. 기존 설정만 있는 사용자는 이 파일을
+미리 만들 필요가 없습니다. 조회는 파일을 만들지 않고 최초 변경 명령에서 저장합니다.
+
+```text
+<ct-config-dir>/
+  config.json
+  registry.json
+  templates/languages/kotlin/codeforces.tmpl
+  templates/languages/kotlin/programmers.tmpl
+  templates/platforms/baekjoon/kotlin.tmpl
+```
+
+스키마 버전은 `1`이며 `languages`, `platforms`, `disabled_languages`,
+`disabled_platforms`, `bindings`를 저장합니다. 내장 정의 자체는 JSON에 복제하지 않습니다.
+각 binding은 `platform`, `language`, `filename`, 설정 디렉터리 기준 상대 `template`
+경로를 연결합니다. 예를 들어 사용자 플랫폼의 Kotlin 바인딩은 다음과 같습니다.
+
+```json
+{
+  "platform": "baekjoon",
+  "language": "kotlin",
+  "filename": "Main.kt",
+  "template": "templates/platforms/baekjoon/kotlin.tmpl"
+}
+```
+
+추가할 당시 비활성이어서 바인딩이 없던 조합은 재활성화 후 기본 파일명과 빈 내용으로
+생성할 수 있습니다. 사용자 바인딩의 파일명은 `registry.json`에서, 템플릿 내용은
+표시된 `.tmpl` 파일에서 수정할 수 있습니다. 내장 조합의 정의·별칭을 사용자 항목으로
+덮어쓸 수 없습니다. 템플릿 경로는 위의 ct 소유 구조만 허용합니다.
+
+레지스트리는 동일 디렉터리의 임시 파일을 쓰고 flush·close한 뒤 교체합니다.
+동시 갱신은 잠금과 원본 비교로 충돌을 알리며 이전 데이터를 조용히 덮어쓰지 않습니다.
+손상된 JSON은 경로와 복구 안내를 출력하고 보존합니다. 강제 종료로 `.registry.lock`이
+남았다면 다른 ct 갱신이 실행 중이지 않은지 확인한 뒤 해당 잠금 파일만 제거하세요.
+머신별 로컬 데이터이며 import/export, 동기화, 원격 레지스트리와 플러그인 실행은 지원하지 않습니다.
 
 ## 개발 및 릴리스
 

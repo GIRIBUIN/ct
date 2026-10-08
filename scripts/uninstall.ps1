@@ -45,6 +45,30 @@ function Remove-CtOwnedFile([string]$Directory, [string]$Name) {
 function Get-CtRemovalUserPath { return [Environment]::GetEnvironmentVariable('Path', 'User') }
 function Set-CtRemovalUserPath([string]$Value) { [Environment]::SetEnvironmentVariable('Path', $Value, 'User') }
 
+function Remove-CtTemplates([string]$ConfigDirectory) {
+    $base = [IO.Path]::GetFullPath((Join-Path $ConfigDirectory 'templates'))
+    Assert-CtRemovalPath $base
+    if (-not [IO.Directory]::Exists($base)) { return }
+    foreach ($kind in @('languages', 'platforms')) {
+        $group = Join-Path $base $kind
+        Assert-CtRemovalPath $group
+        if (-not [IO.Directory]::Exists($group)) { continue }
+        foreach ($owner in @(Get-ChildItem -LiteralPath $group -Force)) {
+            if ($owner.Name -cnotmatch '^[a-z][a-z0-9_-]*$') { continue }
+            Assert-CtRemovalPath $owner.FullName
+            if (-not $owner.PSIsContainer) { continue }
+            foreach ($file in @(Get-ChildItem -LiteralPath $owner.FullName -Force)) {
+                if ($file.Name -cnotmatch '^[a-z][a-z0-9_-]*\.tmpl$') { continue }
+                Assert-CtRemovalPath $file.FullName
+                if (-not $file.PSIsContainer) { [IO.File]::Delete($file.FullName) }
+            }
+            if (@(Get-ChildItem -LiteralPath $owner.FullName -Force).Count -eq 0) { [IO.Directory]::Delete($owner.FullName, $false) }
+        }
+        if (@(Get-ChildItem -LiteralPath $group -Force).Count -eq 0) { [IO.Directory]::Delete($group, $false) }
+    }
+    if (@(Get-ChildItem -LiteralPath $base -Force).Count -eq 0) { [IO.Directory]::Delete($base, $false) }
+}
+
 function Uninstall-Ct([switch]$RemoveConfig) {
     $ErrorActionPreference = 'Stop'
     if ($env:OS -ne 'Windows_NT') { throw 'This uninstaller requires Windows.' }
@@ -56,12 +80,14 @@ function Uninstall-Ct([switch]$RemoveConfig) {
     if ($updated -cne $current) { Set-CtRemovalUserPath $updated }
     $env:PATH = Remove-CtPath $env:PATH $installDir
     if ($RemoveConfig) {
-        if ($env:CT_CONFIG_DIR) { Write-Host 'CT_CONFIG_DIR is not a purge target; only canonical config.json is eligible.' }
-        # Never enumerate/delete arbitrary contents, even under the canonical directory.
-        Remove-CtOwnedFile (Get-CtCanonicalConfig $env:APPDATA) 'config.json'
+        if ($env:CT_CONFIG_DIR) { Write-Host 'CT_CONFIG_DIR is not a purge target; only canonical ct configuration/registry/templates are eligible.' }
+        $canonical = Get-CtCanonicalConfig $env:APPDATA
+        Remove-CtTemplates $canonical
+        Remove-CtOwnedFile $canonical 'registry.json'
+        Remove-CtOwnedFile $canonical 'config.json'
     }
     Write-Host 'ct removed. Solution files and development tools were preserved.'
-    if (-not $RemoveConfig) { Write-Host 'ct configuration was preserved (use -Purge to remove canonical config.json).' }
+    if (-not $RemoveConfig) { Write-Host 'ct configuration, registry and templates were preserved (use -Purge to remove canonical ct data).' }
 }
 
 if ($MyInvocation.InvocationName -ne '.') { Uninstall-Ct -RemoveConfig:$Purge }

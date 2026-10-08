@@ -50,7 +50,7 @@ if ($ctArgs.Count -eq 0) {
 
 Push-Location $repoRoot
 
-$oldCtConfigDir = $env:CT_CONFIG_DIR
+$oldCtConfigDir = [Environment]::GetEnvironmentVariable('CT_CONFIG_DIR', 'Process')
 
 try {
     $firstRun = -not (Test-Path -LiteralPath (Join-Path $tempCtConfig "config.json"))
@@ -68,18 +68,39 @@ try {
     $env:CT_CONFIG_DIR = $tempCtConfig
 
     if ($firstRun) {
-        # Automatically answer the shared first-run wizard with default values.
-        @($tempCodingTest, "", "", "") | & $exe @ctArgs
+        # Avoid PowerShell's native pipeline input handling: after its EOF it
+        # can leave a later native command disconnected from console stdin.
+        # Only this separate process owns the synthetic bootstrap input pipe.
+        $bootstrap = New-Object Diagnostics.Process
+        $bootstrap.StartInfo.FileName = $exe
+        $bootstrap.StartInfo.Arguments = 'config'
+        $bootstrap.StartInfo.UseShellExecute = $false
+        $bootstrap.StartInfo.CreateNoWindow = $true
+        $bootstrap.StartInfo.RedirectStandardInput = $true
+        try {
+            $null = $bootstrap.Start()
+            $answers = [Text.Encoding]::UTF8.GetBytes("$tempCodingTest`n`n`n`n")
+            $bootstrap.StandardInput.BaseStream.Write($answers, 0, $answers.Length)
+            $bootstrap.StandardInput.Close()
+            $bootstrap.WaitForExit()
+            $bootstrapExit = $bootstrap.ExitCode
+        }
+        finally {
+            $bootstrap.Dispose()
+        }
+        if ($bootstrapExit -ne 0) {
+            exit $bootstrapExit
+        }
     }
-    else {
-        & $exe @ctArgs
-    }
+
+    # No pipeline/redirection: inherit the original terminal stdin normally.
+    & $exe @ctArgs
 
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
 }
 finally {
-    $env:CT_CONFIG_DIR = $oldCtConfigDir
+    [Environment]::SetEnvironmentVariable('CT_CONFIG_DIR', $oldCtConfigDir, 'Process')
     Pop-Location
 }

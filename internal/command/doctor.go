@@ -16,7 +16,11 @@ func reportDoctor(output io.Writer, checks []environment.Check) error {
 	var report strings.Builder
 	fmt.Fprintln(&report, "Coding Test Environment")
 	section, issues := "", 0
+	providerUnavailable := false
 	for _, check := range checks {
+		if check.Section == "Environment" && check.Name == "provider" && check.Status == environment.Skip {
+			providerUnavailable = true
+		}
 		if check.Section != section {
 			section = check.Section
 			fmt.Fprintf(&report, "\n%s\n", section)
@@ -31,7 +35,11 @@ func reportDoctor(output io.Writer, checks []environment.Check) error {
 		}
 	}
 	if issues == 0 {
-		fmt.Fprintln(&report, "\nEnvironment ready.")
+		if providerUnavailable {
+			fmt.Fprintln(&report, "\nCommon checks passed. Language environment diagnostics are unavailable; workspace generation is supported.")
+		} else {
+			fmt.Fprintln(&report, "\nEnvironment ready.")
+		}
 	} else {
 		fmt.Fprintf(&report, "\nEnvironment has %d issue(s).\n", issues)
 	}

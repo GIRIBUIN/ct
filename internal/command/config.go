@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/GIRIBUIN/ct/internal/config"
 	"github.com/GIRIBUIN/ct/internal/editor"
 	"github.com/GIRIBUIN/ct/internal/problem"
+	"github.com/GIRIBUIN/ct/internal/registry"
+	"github.com/GIRIBUIN/ct/internal/template"
 	"github.com/GIRIBUIN/ct/internal/version"
 )
 
@@ -23,6 +26,10 @@ Commands:
   config  Configure coding-test root, defaults and VS Code profile interactively
   setup   Plan and install missing components after approval (--dry-run previews only)
 
+Registry:
+  ct language list|show|add|remove|enable|disable
+  ct platform list|show|add|remove|enable|disable
+
 Platforms: codeforces (cf), programmers (pg)
 Languages: cpp (c++), python (py), java, rust (rs)
 Defaults: codeforces, cpp; editor: code
@@ -36,7 +43,19 @@ Examples:
 `
 
 func Run(args []string, input io.Reader, output io.Writer) error {
-	opts, err := parse(args)
+	if len(args) > 0 && (args[0] == "language" || args[0] == "platform") {
+		return registryCommand(args, input, output)
+	}
+	r := registry.Builtins()
+	// Help/version remain available even when local registry data needs repair.
+	if !(len(args) == 1 && (args[0] == "--version" || args[0] == "--help" || args[0] == "-h")) {
+		var err error
+		r, err = registry.Current()
+		if err != nil {
+			return err
+		}
+	}
+	opts, err := parseWithRegistry(args, r)
 	if err != nil {
 		return err
 	}
@@ -66,6 +85,10 @@ func Run(args []string, input io.Reader, output io.Writer) error {
 }
 
 func run(opts options, input io.Reader, output io.Writer, configPath string, open func(string, string, string, string) error) error {
+	r, err := registry.Load(filepath.Dir(configPath))
+	if err != nil {
+		return err
+	}
 	cfg, err := config.Load(configPath)
 	if errors.Is(err, os.ErrNotExist) {
 		cfg, err = configure(configPath, input, output, editor.EnsureProfile, saveConfiguration)
@@ -80,11 +103,19 @@ func run(opts options, input io.Reader, output io.Writer, configPath string, ope
 	if opts.language != "" {
 		language = opts.language
 	}
-	target, err := problem.Target(cfg.Root, platform, language, opts.id)
+	target, err := problem.TargetWithRegistry(r, cfg.Root, platform, language, opts.id)
 	if err != nil {
 		return err
 	}
-	created, err := create(target, platform, language)
+	// Existing solutions remain usable even if an editable template is missing.
+	var data []byte
+	if _, statErr := os.Lstat(target); errors.Is(statErr, os.ErrNotExist) {
+		data, err = template.LoadWithRegistry(r, platform, language)
+		if err != nil {
+			return err
+		}
+	}
+	created, err := createData(target, data)
 	if err != nil {
 		return err
 	}

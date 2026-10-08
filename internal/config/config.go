@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GIRIBUIN/ct/internal/problem"
+	"github.com/GIRIBUIN/ct/internal/configdir"
+	"github.com/GIRIBUIN/ct/internal/registry"
 )
 
 type Config struct {
@@ -24,14 +25,11 @@ func Defaults(root string) Config {
 }
 
 func Path() (string, error) {
-	if dir := os.Getenv("CT_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "config.json"), nil
-	}
-	dir, err := os.UserConfigDir()
+	dir, err := configdir.Dir()
 	if err != nil {
 		return "", fmt.Errorf("locate user configuration directory: %w", err)
 	}
-	return filepath.Join(dir, "ct", "config.json"), nil
+	return filepath.Join(dir, "config.json"), nil
 }
 
 func Load(path string) (Config, error) {
@@ -43,7 +41,7 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("decode configuration %s: %w", path, err)
 	}
-	if err := cfg.validate(path); err != nil {
+	if err := cfg.validate(path, false); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -51,7 +49,7 @@ func Load(path string) (Config, error) {
 
 // Save creates the first-run configuration without replacing an existing one.
 func Save(path string, cfg Config) error {
-	if err := cfg.validate(path); err != nil {
+	if err := cfg.validate(path, true); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -79,7 +77,7 @@ func Save(path string, cfg Config) error {
 // Update replaces configuration only after a complete temporary file is flushed
 // and closed. The temporary file is on the same filesystem as the destination.
 func Update(path string, cfg Config) error {
-	if err := cfg.validate(path); err != nil {
+	if err := cfg.validate(path, true); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -109,14 +107,14 @@ func Update(path string, cfg Config) error {
 
 // Validate checks a proposed configuration without writing or creating paths.
 func Validate(path string, cfg Config) error {
-	return cfg.validate(path)
+	return cfg.validate(path, true)
 }
 
-func (cfg *Config) validate(path string) error {
-	if cfg.Root == "" || !filepath.IsAbs(cfg.Root) {
+func ValidateRoot(path, root string) error {
+	if root == "" || !filepath.IsAbs(root) {
 		return errors.New("configuration root must be an absolute directory path")
 	}
-	if info, err := os.Stat(cfg.Root); err == nil && !info.IsDir() {
+	if info, err := os.Stat(root); err == nil && !info.IsDir() {
 		return errors.New("configuration root is not a directory")
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("check root directory: %w", err)
@@ -125,9 +123,16 @@ func (cfg *Config) validate(path string) error {
 	if err != nil {
 		return err
 	}
-	rel, err := filepath.Rel(cfg.Root, configPath)
+	rel, err := filepath.Rel(root, configPath)
 	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return errors.New("configuration location must be outside the coding-test root; choose a more specific root directory")
+	}
+	return nil
+}
+
+func (cfg *Config) validate(path string, requireEnabled bool) error {
+	if err := ValidateRoot(path, cfg.Root); err != nil {
+		return err
 	}
 	if cfg.Platform == "" {
 		cfg.Platform = "codeforces"
@@ -138,10 +143,25 @@ func (cfg *Config) validate(path string) error {
 	if cfg.Editor == "" {
 		cfg.Editor = "code"
 	}
-	cfg.Platform, err = problem.NormalizePlatform(cfg.Platform)
+	r, err := registry.Load(filepath.Dir(path))
 	if err != nil {
 		return err
 	}
-	cfg.Language, err = problem.NormalizeLanguage(cfg.Language)
-	return err
+	for _, field := range []struct {
+		kind  string
+		value *string
+	}{{"platform", &cfg.Platform}, {"language", &cfg.Language}} {
+		d, err := r.Lookup(field.kind, *field.value, requireEnabled)
+		if err != nil {
+			if requireEnabled {
+				return err
+			}
+			// A removed/disabled default must remain repairable through ct config,
+			// and explicit generation overrides must still be usable.
+			*field.value = strings.ToLower(strings.TrimSpace(*field.value))
+		} else {
+			*field.value = d.Name
+		}
+	}
+	return nil
 }

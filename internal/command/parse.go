@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/GIRIBUIN/ct/internal/problem"
+	"github.com/GIRIBUIN/ct/internal/registry"
 )
 
 type options struct {
@@ -22,11 +22,15 @@ type options struct {
 
 // parse accepts options on either side of the problem ID.
 func parse(args []string) (options, error) {
+	return parseWithRegistry(args, registry.Builtins())
+}
+
+func parseWithRegistry(args []string, r *registry.Registry) (options, error) {
 	if len(args) == 1 && args[0] == "--version" {
 		return options{version: true}, nil
 	}
 	if len(args) > 0 && (args[0] == "setup" || args[0] == "doctor" || args[0] == "config") {
-		return parseCommand(args)
+		return parseCommand(args, r)
 	}
 	var opts options
 	for i := 0; i < len(args); i++ {
@@ -57,9 +61,9 @@ func parse(args []string) (options, error) {
 		}
 		var err error
 		if name == "-p" || name == "--platform" {
-			opts.platform, err = problem.NormalizePlatform(value)
+			opts.platform, err = r.Normalize("platform", value)
 		} else {
-			opts.language, err = problem.NormalizeLanguage(value)
+			opts.language, err = r.Normalize("language", value)
 		}
 		if err != nil {
 			return options{}, err
@@ -71,7 +75,7 @@ func parse(args []string) (options, error) {
 	return opts, nil
 }
 
-func parseCommand(args []string) (options, error) {
+func parseCommand(args []string, r *registry.Registry) (options, error) {
 	opts := options{setup: args[0] == "setup", doctor: args[0] == "doctor", config: args[0] == "config"}
 	for i := 1; i < len(args); i++ {
 		name, value, hasValue := strings.Cut(args[i], "=")
@@ -91,7 +95,7 @@ func parseCommand(args []string) (options, error) {
 				value = args[i]
 			}
 			var err error
-			opts.language, err = problem.NormalizeLanguage(value)
+			opts.language, err = r.Normalize("language", value)
 			if err != nil {
 				return options{}, err
 			}

@@ -2,50 +2,34 @@ package problem
 
 import (
 	"fmt"
+	"github.com/GIRIBUIN/ct/internal/platform"
+	"github.com/GIRIBUIN/ct/internal/registry"
 	"path/filepath"
-	"strings"
-
-	lang "github.com/GIRIBUIN/ct/internal/language"
 )
 
 func NormalizePlatform(value string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "cf", "codeforces":
-		return "codeforces", nil
-	case "pg", "programmers":
-		return "programmers", nil
-	default:
-		return "", fmt.Errorf("unsupported platform %q (use codeforces or programmers)", value)
-	}
+	return registry.Builtins().Normalize("platform", value)
 }
 
 func NormalizeLanguage(value string) (string, error) {
-	definition, err := lang.Lookup(value)
-	return definition.Name, err
+	return registry.Builtins().Normalize("language", value)
 }
 
 // Target validates the ID before using it as a directory name.
 func Target(root, platform, language, id string) (string, error) {
-	platform, err := NormalizePlatform(platform)
+	return TargetWithRegistry(registry.Builtins(), root, platform, language, id)
+}
+
+func TargetWithRegistry(r *registry.Registry, root, p, l, id string) (string, error) {
+	b, err := r.Binding(p, l)
 	if err != nil {
 		return "", err
 	}
-	language, err = NormalizeLanguage(language)
-	if err != nil {
+	if err := platform.ValidateID(b.Platform, id); err != nil {
 		return "", err
 	}
-	definition, _ := lang.Lookup(language)
-	var name string
-	switch platform {
-	case "codeforces":
-		err = validateCodeforcesID(id)
-		name = definition.CodeforcesFile
-	case "programmers":
-		err = validateProgrammersID(id)
-		name = definition.ProgrammersFile
+	if err := registry.Filename(id); err != nil {
+		return "", fmt.Errorf("invalid problem directory: %w", err)
 	}
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, platform, id, name), nil
+	return filepath.Join(root, b.Platform, id, b.Filename), nil
 }

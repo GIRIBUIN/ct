@@ -120,13 +120,28 @@ printf '%s\n' 'printf '\''ct_onboard "$CT_TEST_TARGET"\n'\'' | bash' > "$test_ro
 script -q -e -c "bash $test_root/tty-driver" /dev/null < /dev/null > "$test_root/tty-output"
 [[ $(cat "$CT_TEST_CALLS") == $'config\ndoctor' ]]
 printf '{}' > "$XDG_CONFIG_HOME/ct/config.json"
+printf '{"version":1}' > "$XDG_CONFIG_HOME/ct/registry.json"
+mkdir -p "$XDG_CONFIG_HOME/ct/templates/languages/kotlin" "$XDG_CONFIG_HOME/ct/templates/platforms/baekjoon"
+printf 'template' > "$XDG_CONFIG_HOME/ct/templates/languages/kotlin/codeforces.tmpl"
+printf 'template' > "$XDG_CONFIG_HOME/ct/templates/platforms/baekjoon/kotlin.tmpl"
+printf 'keep unknown file' > "$XDG_CONFIG_HOME/ct/templates/languages/kotlin/notes.txt"
+printf 'override registry' > "$CT_CONFIG_DIR/registry.json"
 printf 'solution' > "$CT_CONFIG_DIR/main.cpp"
 printf 'sibling solution' > "$XDG_CONFIG_HOME/ct/main.cpp"
 ct_uninstall
 [[ ! -e $HOME/.local/bin/ct && -f $XDG_CONFIG_HOME/ct/config.json ]]
+[[ -f $XDG_CONFIG_HOME/ct/registry.json && -f $XDG_CONFIG_HOME/ct/templates/languages/kotlin/codeforces.tmpl ]]
 cmp "$HOME/.profile" "$test_root/original"
 ct_uninstall --purge
 [[ ! -e $XDG_CONFIG_HOME/ct/config.json && -f $XDG_CONFIG_HOME/ct/main.cpp && -f $CT_CONFIG_DIR/main.cpp ]]
+[[ ! -e $XDG_CONFIG_HOME/ct/registry.json && ! -e $XDG_CONFIG_HOME/ct/templates/languages/kotlin/codeforces.tmpl ]]
+[[ ! -e $XDG_CONFIG_HOME/ct/templates/platforms && -f $XDG_CONFIG_HOME/ct/templates/languages/kotlin/notes.txt ]]
+[[ $(cat "$CT_CONFIG_DIR/registry.json") == 'override registry' ]]
+# A linked template owner must never lead purge outside canonical storage.
+ln -s "$CT_CONFIG_DIR" "$XDG_CONFIG_HOME/ct/templates/languages/linked"
+printf 'keep linked template' > "$CT_CONFIG_DIR/codeforces.tmpl"
+if ct_remove_templates "$XDG_CONFIG_HOME/ct"; then echo 'Linked template owner accepted' >&2; exit 1; fi
+[[ $(cat "$CT_CONFIG_DIR/codeforces.tmpl") == 'keep linked template' ]]
 printf '# >>> ct PATH >>>\n# user edited\n# <<< ct PATH <<<\n' >> "$HOME/.profile"
 cp "$HOME/.profile" "$test_root/edited"
 ct_remove_profile "$HOME/.profile"

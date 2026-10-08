@@ -12,13 +12,23 @@ type Definition struct {
 	Aliases                         []string
 	CodeforcesFile, ProgrammersFile string
 	Extension                       Extension
+	FileExtension                   string
+	Environment                     string
 }
 
 var definitions = []Definition{
-	{"cpp", []string{"cpp", "c++"}, "main.cpp", "solution.cpp", Extension{"C/C++", "ms-vscode.cpptools"}},
-	{"python", []string{"python", "py"}, "main.py", "solution.py", Extension{"Python", "ms-python.python"}},
-	{"java", []string{"java"}, "Main.java", "Solution.java", Extension{"Java", "redhat.java"}},
-	{"rust", []string{"rust", "rs"}, "main.rs", "solution.rs", Extension{"Rust", "rust-lang.rust-analyzer"}},
+	{"cpp", []string{"cpp", "c++"}, "main.cpp", "solution.cpp", Extension{"C/C++", "ms-vscode.cpptools"}, "cpp", "full"},
+	{"python", []string{"python", "py"}, "main.py", "solution.py", Extension{"Python", "ms-python.python"}, "py", "detect"},
+	{"java", []string{"java"}, "Main.java", "Solution.java", Extension{"Java", "redhat.java"}, "java", "full"},
+	{"rust", []string{"rust", "rs"}, "main.rs", "solution.rs", Extension{"Rust", "rust-lang.rust-analyzer"}, "rs", "partial"},
+}
+
+func Definitions() []Definition {
+	result := append([]Definition(nil), definitions...)
+	for i := range result {
+		result[i].Aliases = append([]string(nil), result[i].Aliases...)
+	}
+	return result
 }
 
 func Lookup(value string) (Definition, error) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/GIRIBUIN/ct/internal/config"
-	"github.com/GIRIBUIN/ct/internal/problem"
+	"github.com/GIRIBUIN/ct/internal/registry"
 )
 
 func saveConfiguration(path string, cfg config.Config, existing bool) error {
@@ -21,6 +21,10 @@ func saveConfiguration(path string, cfg config.Config, existing bool) error {
 }
 
 func configure(path string, input io.Reader, output io.Writer, ensureProfile func(string, string) error, save func(string, config.Config, bool) error) (config.Config, error) {
+	r, err := registry.Load(filepath.Dir(path))
+	if err != nil {
+		return config.Config{}, err
+	}
 	cfg, err := config.Load(path)
 	existing := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -31,6 +35,11 @@ func configure(path string, input io.Reader, output io.Writer, ensureProfile fun
 		fmt.Fprintln(output, "ct initial configuration")
 	} else {
 		fmt.Fprintln(output, "ct configuration")
+	}
+	for kind, value := range map[string]string{"platform": cfg.Platform, "language": cfg.Language} {
+		if _, err := r.Normalize(kind, value); err != nil {
+			fmt.Fprintln(output, "Current default:", err)
+		}
 	}
 	reader := bufio.NewReader(input)
 	prompt := func(label, current string) (string, error) {
@@ -63,7 +72,7 @@ func configure(path string, input io.Reader, output io.Writer, ensureProfile fun
 		}
 		root, err = filepath.Abs(root)
 		if err == nil {
-			err = config.Validate(path, config.Defaults(root))
+			err = config.ValidateRoot(path, root)
 		}
 		if err != nil {
 			fmt.Fprintln(output, "Invalid root:", err)
@@ -77,8 +86,8 @@ func configure(path string, input io.Reader, output io.Writer, ensureProfile fun
 		value     *string
 		normalize func(string) (string, error)
 	}{
-		{"Default platform", &cfg.Platform, problem.NormalizePlatform},
-		{"Default language", &cfg.Language, problem.NormalizeLanguage},
+		{"Default platform", &cfg.Platform, func(v string) (string, error) { return r.Normalize("platform", v) }},
+		{"Default language", &cfg.Language, func(v string) (string, error) { return r.Normalize("language", v) }},
 	} {
 		for {
 			value, err := prompt(field.label, *field.value)
