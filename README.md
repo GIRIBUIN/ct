@@ -1,12 +1,18 @@
+<img src="assets/icon.png" alt="ct icon" width="80" height="80" />
+
 # ct
 
 Windows와 Linux에서 코딩 테스트 풀이 파일을 만들고 VS Code로 여는 Go CLI입니다.
 
+## 시연 영상
+
+[![ct 시연 영상](assets/thumbnail.png)](https://youtu.be/NN1xVfZOhDg)
+
 ## 설치와 업데이트
 
 지원 대상은 **Windows amd64, Linux amd64, Linux arm64**입니다. 배포 바이너리를
-사용하면 Go, Git, 저장소 복제나 수동 빌드가 필요 없습니다. 아래 설치 명령은
-첫 GitHub Release가 게시된 뒤 사용할 수 있습니다.
+사용하면 Go, Git, 저장소 복제나 수동 빌드가 필요 없습니다. 공개 바이너리는
+[Releases](https://github.com/GIRIBUIN/ct/releases)에서 받을 수 있으며, 아래 설치 명령은 최신 정식 릴리스를 설치합니다.
 
 ### Windows (PowerShell 5.1 이상)
 
